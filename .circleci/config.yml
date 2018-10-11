@@ -1,13 +1,18 @@
 version: 2
 jobs:
   build:
+    working_directory: ~/main
     docker:
-      - image: debian:stretch
+      - image: rocker/tidyverse:3.4.3
     steps:
       - checkout
       - run: 
           name: Greeting
-          command: echo Hello, world.
+          command: echo Starting build of BikeCount
+      - run:
+          command: R --version
+      - run:
+         command: R -e 'devtools::check()'
       - run:
           name: Print the Current Time
           command: date
