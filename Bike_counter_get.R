@@ -3,6 +3,9 @@
 # https://data.cambridgema.gov/resource/gxzm-dpwp.json
 
 # install.packages('RSocrata', dep=T)
+
+# devtools::install_github('Chicago/RSocrata', ref='dev')
+
 library(RSocrata)
 library(tidyverse)
 library(lubridate) 
@@ -89,4 +92,4 @@ ggplot(daily, aes(x = date, y = daily_total)) +
   geom_point()
 
 
-# Make a Shiny Dashboard
+# Make a Shiny Dashboard...
