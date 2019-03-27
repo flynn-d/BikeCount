@@ -8,7 +8,9 @@
 
 library(RSocrata)
 library(tidyverse)
-library(lubridate) 
+library(lubridate)
+library(shiny)
+library(shinydashboard)
 
 setwd("~/Projects/BikeCount")
 
@@ -104,3 +106,12 @@ ggplot(daily, aes(x = date, y = daily_total)) +
 
 
 # Make a Shiny Dashboard...
+
+ui <- dashboardPage(
+  dashboardHeader(),
+  dashboardSidebar(),
+  dashboardBody()
+)
+
+server <- function(input, output) {}
+shinyApp(ui, server)
