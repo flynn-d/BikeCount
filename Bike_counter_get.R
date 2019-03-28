@@ -14,7 +14,7 @@ setwd("~/Projects/BikeCount")
 
 # Grab data from API ----
 
-FRESHENUP = F
+FRESHENUP = T
 
 if(FRESHENUP){
   # Load historical count once. Takes 7s initially to download, vs. 0.1s to load from working directory. 
@@ -30,11 +30,24 @@ if(FRESHENUP){
   # Try to get fresher data. Defaults to hist_count if nothing fresher found.
   if(Sys.Date() > as.Date(last_day)){
   #  new_count <- read.socrata(url = paste0("https://data.cambridgema.gov/resource/gxzm-dpwp.csv?$offset=", rows_hist))
-    if(nrow(new_count) > 0){
-      count <- rbind(hist_count, new_count)
-      } else { count <- hist_count }
-    }
+    # Seems to work now 
+    response <- httr::GET(paste0("https://data.cambridgema.gov/resource/gxzm-dpwp.csv?$offset=", rows_hist))
+    r_df <- read_csv(httr::content(response, 
+                                          as = "text", 
+                                          type = "text/csv", 
+                                          encoding = "utf-8"))
+    
+    # Check to see if there is actually new data or if just delayed compared to Sys.Date()
+    if(nrow(r_df) > 0){
+      new_count <- as.data.frame(response)
+      hist_count <- rbind(hist_count, new_count)
+      count <- hist_count
+    } else { 
+        count <- hist_count }
+  }
+  save(list=c('hist_count'), file = 'BikeCountHist.RData')
 } else {
+  # If set FRESHENUP to F, just read the entire history in one step
   count <- read.socrata(url = "https://data.cambridgema.gov/resource/gxzm-dpwp.csv")
 }
 
