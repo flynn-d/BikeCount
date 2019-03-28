@@ -54,11 +54,27 @@ count <- count %>%
   mutate(date = as.Date(date),
          year = year(datetime))
 
-daily = count %>%
-  group_by(year, date) %>%
-  dplyr::summarise(daily_total = sum(total))
+hourly = count %>%
+  mutate(hour = format(datetime, '%H'),
+         month = format(datetime, '%m')) %>%
+  group_by(year, month, day, hour) %>%
+  dplyr::summarise(total = mean(total),
+                   entries = mean(entries),
+                   exits = mean(exits))
 
-max_day = daily %>% filter(daily_total == max(daily_total))
+hourly_hour_month <- hourly %>%
+  group_by(hour, month) %>%
+  summarize(total = mean(total),
+            entries = mean(entries),
+            exits = mean(exits))
+
+daily = count %>%
+  group_by(year, date, day_of_week = as.factor(day)) %>%
+  dplyr::summarise(total = sum(total),
+                   entries = sum(entries),
+                   exits = sum(exits))
+
+max_day = daily %>% filter(total == max(total))
 
 latest_day = daily %>% ungroup(daily) %>% filter(date == max(date))
 last_year_compare = daily %>% filter(date == paste(year(latest_day$date)-1, month(latest_day$date), day(latest_day$date), sep="-"))
@@ -68,25 +84,24 @@ latest_ytd = daily %>%
   ungroup(daily) %>% 
   filter(year == max(year)) %>%
   dplyr::summarize(nrecord = n(), 
-            ytd = sum(daily_total))
+            ytd = sum(total))
 
 ytd_compare = daily %>% 
   ungroup(daily) %>%
   filter(year == max(year)-1) %>%
   filter(date <= paste(year(latest_day$date)-1, month(latest_day$date), day(latest_day$date), sep="-")) %>%
   dplyr::summarize(nrecord = n(),
-            ytd = sum(daily_total))
+            ytd = sum(total))
 
 # Weekly counts and comparison
 
-weekly <- count %>%
-  mutate(weekofyear = week(datetime),
-         year = year(datetime)) %>%
+weekly <- daily %>%
+  mutate(weekofyear = week(date)) %>%
   group_by(year, weekofyear) %>%
-  dplyr::summarize(weekly_total = sum(total),
-            complete_week = length(total) == 24*7*4)
+  dplyr::summarize(complete_week = length(total) == 7,
+                   total = sum(total))
 
-max_week = weekly %>% filter(weekly_total == max(weekly_total)) # gives the max week of each year, since we did group_by year
+max_week = weekly %>% filter(total == max(total)) # gives the max week of each year, since we did group_by year
 
 latest_complete_week = weekly %>% 
   ungroup(weekly) %>%
@@ -95,12 +110,5 @@ latest_complete_week = weekly %>%
   filter(weekofyear == max(weekofyear))
 
 last_year_compare_week = weekly %>% filter(year == latest_complete_week$year-1, weekofyear == latest_complete_week$weekofyear)
-
-
-# Testing some visualizations ----
-
-ggplot(daily, aes(x = date, y = daily_total)) +
-  geom_point()
-
 
 # Make a Shiny Dashboard...
