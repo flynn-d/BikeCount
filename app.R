@@ -1,6 +1,5 @@
 library(ggplot2)
 library(plotly)
-library(Cairo)
 
 ui <- pageWithSidebar(
   headerPanel('Bike count data'),
