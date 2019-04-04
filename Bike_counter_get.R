@@ -10,7 +10,7 @@ library(RSocrata)
 library(tidyverse)
 library(lubridate) 
 
-setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+# setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 # setwd("~/Projects/BikeCount")
 
 # Grab data from API ----
