@@ -71,7 +71,7 @@ count <- count %>%
          year = year(datetime))
 
 hourly = count %>%
-  mutate(hour = format(datetime, '%H'),
+  mutate(hour = as.numeric(format(datetime, '%H')),
          month = format(datetime, '%m')) %>%
   group_by(year, month, day, hour) %>%
   dplyr::summarise(total = mean(total),
@@ -94,6 +94,14 @@ max_day = daily %>% filter(total == max(total))
 
 latest_day = daily %>% ungroup(daily) %>% filter(date == max(date))
 last_year_compare = daily %>% filter(date == paste(year(latest_day$date)-1, month(latest_day$date), day(latest_day$date), sep="-"))
+
+# Order day of week factor better
+# levels(daily$day_of_week)
+levels(daily$day_of_week) <- paste(c(6, 2, 7, 1, 5, 3, 4),
+                                   levels(daily$day_of_week))
+daily$day_of_week <- as.factor(as.character(daily$day_of_week))
+levels(daily$day_of_week) <- c('Sunday', 'Monday', 'Tuesday', 'Wednesday',
+                               'Thursday', 'Friday', 'Saturday')
 
 # Year to date
 latest_ytd = daily %>% 
