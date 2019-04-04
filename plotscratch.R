@@ -18,3 +18,31 @@ gp <- ggplot(hourly_hour_month, aes(x = as.numeric(hour), y = total, color = mon
   theme_bw()
 
 ggplotly(gp, tooltip= c('total', 'month'))
+
+# Entries should be West bound -- much lower in 2016-2018, when Longfellow bridge was closed.
+# Exits is East bound, going in to boston
+
+daily %>%
+  group_by(year) %>%
+  summarize(mean(entries),
+            mean(exits))
+
+
+# Weekly view
+day_of_week = daily %>%
+  group_by(year, day_of_week) %>%
+  dplyr::summarize(total = mean(total, na.rm=T),
+                   entries = mean(entries, na.rm=T),
+                   exits = mean(exits, na.rm=T))
+
+ggplot(daily, aes(x = day_of_week, y = total, group = year)) + 
+  geom_point()
+
+gp <- ggplot(daily, aes(x = day_of_week, y = total, color = as.factor(year))) +
+  geom_point(aes(text = date)) +
+  xlab('Day of week') + 
+  theme_bw()
+
+ggplotly(gp, tooltip= c('total', 'date'))
+
+  
