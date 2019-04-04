@@ -1,6 +1,8 @@
 library(ggplot2)
 library(plotly)
 
+source('Bike_counter_get.R')
+
 ui <- fluidPage(
   
   titlePanel('Bike count data'),
