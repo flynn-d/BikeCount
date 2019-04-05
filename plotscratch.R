@@ -1,5 +1,11 @@
 # Scratch plots
 
+# Text ideas ----
+# Link to City site: https://data.cambridgema.gov/dataset/Eco-Totem-Broadway-Bicycle-Counts-by-Date/9yzv-hx4u
+# Add info on what to do with the buttons, other actions
+# Add link to GitHub repo
+
+# Plot ideas ----
 # Daily
 # ideas: interactive time series plots with different time units as options on x: 
 # date, day of week, year
@@ -9,6 +15,9 @@
 # Hour along x
 # color for month
 # drop-down filter for year... with compare?
+
+
+# System time zone: set in command line: sudo timedatectl set-timezone America/New_York
 
 # Heat map: columns for months, rows for hour of day, color for count or intensity of riders
 

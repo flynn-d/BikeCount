@@ -38,7 +38,8 @@ if(FRESHENUP){
     r_df <- read_csv(httr::content(response, 
                                           as = "text", 
                                           type = "text/csv", 
-                                          encoding = "utf-8"))
+                                          encoding = "utf-8"),
+                     locale = locale(tz = 'America/New_York'))
     
     # Check to see if there is actually new data or if just delayed compared to Sys.Date()
     if(nrow(r_df) > 0){
@@ -58,13 +59,14 @@ if(FRESHENUP){
 # Get some metrics ----
 
 # Day with the most total rides: max_day
-# Week witih most todal rides: max_week
+# Week with most todal rides: max_week
 # Today compared to same day last year: latest_day and last_year_compare
 # Last week compared to same week last year: latest_complete_week and last_year_compare_week
 # Year to date total trips and last year's comparison value: latest_ytd and ytd_compare
 
 # read.socrata reads 'date' as date-time, all at midnight. Need to reformat as actualy date only, without time.
 count <- as_tibble(count)
+
 
 count <- count %>% 
   mutate(date = as.Date(date),
@@ -103,6 +105,7 @@ daily$day_of_week <- as.factor(as.character(daily$day_of_week))
 levels(daily$day_of_week) <- c('Sunday', 'Monday', 'Tuesday', 'Wednesday',
                                'Thursday', 'Friday', 'Saturday')
 
+
 # Year to date
 latest_ytd = daily %>% 
   ungroup(daily) %>% 
@@ -134,5 +137,3 @@ latest_complete_week = weekly %>%
   filter(weekofyear == max(weekofyear))
 
 last_year_compare_week = weekly %>% filter(year == latest_complete_week$year-1, weekofyear == latest_complete_week$weekofyear)
-
-# Make a Shiny Dashboard...
