@@ -15,46 +15,37 @@ library(lubridate)
 
 # Grab data from API ----
 
-FRESHENUP = T
+# Load historical count once. Takes 7s initially to download, vs. 0.1s to load from working directory. 
+# We will increment the historical data daily
+if(length(grep("BikeCountHist.RData", dir()))==0){
+  hist_count <- read.socrata("https://data.cambridgema.gov/resource/gxzm-dpwp.csv")
+  save("hist_count", file = "BikeCountHist.RData")
+} else { load("BikeCountHist.RData") }
 
-if(FRESHENUP){
-  # Load historical count once. Takes 7s initially to download, vs. 0.1s to load from working directory. 
-  # We will increment the historical data daily
-  if(length(grep("BikeCountHist.RData", dir()))==0){
-    hist_count <- read.socrata("https://data.cambridgema.gov/resource/gxzm-dpwp.csv")
-    save("hist_count", file = "BikeCountHist.RData")
-  } else { load("BikeCountHist.RData") }
+rows_hist <- nrow(hist_count)
+last_day <- max(hist_count$date)
+
+# Try to get fresher data. Defaults to hist_count if nothing fresher found.
+if(Sys.Date() > as.Date(last_day)){
+  # Combine order and offset. Default is to order new to old, while our RSocrata query returns results old to new.
+  response <- httr::GET(paste0("https://data.cambridgema.gov/resource/gxzm-dpwp.csv?$order=date&$offset=", rows_hist))
   
-  rows_hist <- nrow(hist_count)
-  last_day <- max(hist_count$date)
+  # read_csv parses datetime, so need to provide correct time zone as well
+  r_df <- read_csv(httr::content(response, 
+                                        as = "text", 
+                                        type = "text/csv", 
+                                        encoding = "utf-8"),
+                   locale = locale(tz = 'America/New_York'))
   
-  # Try to get fresher data. Defaults to hist_count if nothing fresher found.
-  if(Sys.Date() > as.Date(last_day)){
-  #  new_count <- read.socrata(url = paste0("https://data.cambridgema.gov/resource/gxzm-dpwp.csv?$offset=", rows_hist))
-    # response <- httr::GET(paste0("https://data.cambridgema.gov/resource/gxzm-dpwp.csv?limit=100&$offset=", rows_hist))
-    # Solution: combine order and offset. Default is to order new to old, while our RSocrata query returns results old to new.
-    response <- httr::GET(paste0("https://data.cambridgema.gov/resource/gxzm-dpwp.csv?$order=date&$offset=", rows_hist))
-    
-    r_df <- read_csv(httr::content(response, 
-                                          as = "text", 
-                                          type = "text/csv", 
-                                          encoding = "utf-8"),
-                     locale = locale(tz = 'America/New_York'))
-    
-    # Check to see if there is actually new data or if just delayed compared to Sys.Date()
-    if(nrow(r_df) > 0){
-      new_count <- as.data.frame(r_df)
-      hist_count <- rbind(hist_count, new_count)
-      count <- hist_count
-    } else { 
-        count <- hist_count }
-  }
-  save(list=c('hist_count'), file = 'BikeCountHist.RData')
-} else {
-  # If set FRESHENUP to F, just read the entire history in one step
-  count <- read.socrata(url = "https://data.cambridgema.gov/resource/gxzm-dpwp.csv")
+  # Check to see if there is actually new data or if just delayed compared to Sys.Date()
+  if(nrow(r_df) > 0){
+    new_count <- as.data.frame(r_df)
+    hist_count <- rbind(hist_count, new_count)
+    count <- hist_count
+  } else { 
+      count <- hist_count }
 }
-
+save(list=c('hist_count'), file = 'BikeCountHist.RData')
 
 # Get some metrics ----
 
@@ -66,7 +57,6 @@ if(FRESHENUP){
 
 # read.socrata reads 'date' as date-time, all at midnight. Need to reformat as actualy date only, without time.
 count <- as_tibble(count)
-
 
 count <- count %>% 
   mutate(date = as.Date(date),
@@ -104,7 +94,6 @@ levels(daily$day_of_week) <- paste(c(6, 2, 7, 1, 5, 3, 4),
 daily$day_of_week <- as.factor(as.character(daily$day_of_week))
 levels(daily$day_of_week) <- c('Sunday', 'Monday', 'Tuesday', 'Wednesday',
                                'Thursday', 'Friday', 'Saturday')
-
 
 # Year to date
 latest_ytd = daily %>% 
