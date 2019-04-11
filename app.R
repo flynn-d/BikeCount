@@ -40,6 +40,9 @@ server <- function(input, output, session) {
           xlab('Date') +
           theme_bw() 
         
+        ggp <- ggplotly(gp) %>% rangeslider(start = as.numeric(min(daily$date))*86400000,
+                                            end = as.numeric(max(daily$date))*86400000)
+        
       }
       
       # Hourly view
@@ -53,6 +56,8 @@ server <- function(input, output, session) {
           xlab('Hour of day') +  
           theme_bw()
         
+        ggp <- ggplotly(gp)
+        
       }
       
       # Day of week view
@@ -65,9 +70,10 @@ server <- function(input, output, session) {
           xlab('Day of week') + 
           theme_bw()
         
+        ggp <- ggplotly(gp)
       }
       
-      print(ggplotly(gp))
+      print(ggp)
       
           })
 

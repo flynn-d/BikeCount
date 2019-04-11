@@ -34,8 +34,9 @@ if(Sys.Date() > as.Date(last_day)){
   r_df <- read_csv(httr::content(response, 
                                         as = "text", 
                                         type = "text/csv", 
-                                        encoding = "utf-8"),
-                   locale = locale(tz = 'America/New_York'))
+                                        encoding = "utf-8")#,
+                 #  locale = locale(tz = 'America/New_York')
+                 )
   
   # Check to see if there is actually new data or if just delayed compared to Sys.Date()
   if(nrow(r_df) > 0){

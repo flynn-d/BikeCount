@@ -26,7 +26,9 @@ gp <- ggplot(hourly_hour_month, aes(x = as.numeric(hour), y = total, color = mon
   xlab('Hour of day') + ylab('Average count') + 
   theme_bw()
 
-ggplotly(gp, tooltip= c('total', 'month'))
+ggplotly(gp, tooltip= c('total', 'month')) %>%
+  rangeslider()
+
 
 # Entries should be West bound -- much lower in 2016-2018, when Longfellow bridge was closed.
 # Exits is East bound, going in to boston
