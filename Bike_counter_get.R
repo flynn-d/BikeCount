@@ -63,6 +63,14 @@ count <- count %>%
   mutate(date = as.Date(date),
          year = year(datetime))
 
+hourly_day = count %>%
+  mutate(hour = as.numeric(format(datetime, '%H')),
+         month = format(datetime, '%m')) %>%
+  group_by(year, month, day, hour, date) %>%
+  dplyr::summarise(total = sum(total),
+                   entries = sum(entries),
+                   exits = sum(exits))
+
 hourly = count %>%
   mutate(hour = as.numeric(format(datetime, '%H')),
          month = format(datetime, '%m')) %>%

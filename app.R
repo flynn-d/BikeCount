@@ -40,8 +40,8 @@ server <- function(input, output, session) {
           xlab('Date') +
           theme_bw() 
         
-        ggp <- ggplotly(gp) %>% rangeslider(start = as.numeric(min(daily$date))*86400000,
-                                            end = as.numeric(max(daily$date))*86400000)
+        ggp <- ggplotly(gp) #%>% rangeslider(start = as.numeric(min(daily$date))*86400000,
+                            #                end = as.numeric(max(daily$date))*86400000)
         
       }
       
