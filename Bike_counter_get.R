@@ -2,10 +2,7 @@
 
 # https://data.cambridgema.gov/resource/gxzm-dpwp.json
 
-# install.packages('RSocrata', dep=T)
-
-# devtools::install_github('Chicago/RSocrata', ref='dev')
-
+# source('get_dependencies.R') # Run this once on a new instance, may be time-consuming 
 library(RSocrata)
 library(tidyverse)
 library(lubridate) 
@@ -34,8 +31,8 @@ if(Sys.Date() > as.Date(last_day)){
   r_df <- read_csv(httr::content(response, 
                                         as = "text", 
                                         type = "text/csv", 
-                                        encoding = "utf-8")#,
-                 #  locale = locale(tz = 'America/New_York')
+                                        encoding = "utf-8"),
+                 locale = locale(tz = 'America/New_York')
                  )
   
   # Check to see if there is actually new data or if just delayed compared to Sys.Date()
