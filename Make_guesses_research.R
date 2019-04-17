@@ -10,6 +10,7 @@ library(MASS) # for negative binomial regression
 library(pscl) # for zero-inflated models
 library(randomForest)
 library(doParallel)
+library(forecast)
 
 # create 'tomorrow' data to guess on
 today <- Sys.Date()
@@ -97,9 +98,98 @@ hourly_day %>%
   summarize(n_days = n()/24,
             ave_total = sum(total)/n_days)
 
-# time series with seasonality
+# Time series approaches ----
+
+# Time series with seasonality
+# Transform to a time-series object; does not use any covariates
+dayts <- daily$total
+start_day = min(daily$date)
+end_day = max(daily$date)
+dayts <- ts(dayts, 
+            start = c(as.numeric(format(start_day, "%Y")),
+                      as.numeric(format(start_day, "%j"))),
+            end = c(as.numeric(format(end_day, "%Y")),
+                    as.numeric(format(end_day, "%j"))),
+            frequency = 365)
+
+# Decompose into trends, seasonality, and random
+
+count_components <- decompose(dayts)
+plot(count_components) # strongly non stationary, strong seasonal trend
+
+# Holt-Winter exponential smoothing
+# No covariates used
+
+dayts_forecasts <- HoltWinters(dayts, beta=FALSE, gamma=FALSE)
+plot(dayts_forecasts) # excellent 
+dayts_forecasts2 <- forecast(dayts_forecasts, h = 365)
+plot(dayts_forecasts2, include = 365*3)  # simple exponential smoothing fails at forecasting
+
+dayts_forecasts <- HoltWinters(dayts, beta=NULL, gamma=NULL)
+plot(dayts_forecasts) # pretty good
+dayts_forecasts2 <- forecast(dayts_forecasts, h = 365)
+plot(dayts_forecasts2, include = 365*3)  # Much better forecasts, maybe overestimating trend
 
 # ARIMA (Autoregressive integrated moving averages)
+# Can use with covariates as ARIMAX model
+acf(dayts, lag.max = 365) # extremely strong autocorrelation
+pacf(dayts, lag.max = 60) # strong weekly partial autocorrelation at 7, 14, 21.
+
+# ARIMA models take three parameters: p, d, q. These are the AR order, degree of differencing, and MA order
+suggest_arima <- auto.arima(dayts,
+                            max.p = 30) # suggests ARIMA(5,1,3): 5th order AR, 3 MA components
+# if increase max.p to 30 (i.e., this day's count is dependent on what happend on this day last month), suggested model is ARIMA(13, 1, 0)
+
+# !!!! Very slow! 
+suggest_arima_full <- auto.arima(dayts, 
+                                 max.p = 30,
+                                 D = 1, # Force it to look for seasonal pattern
+                                 stepwise = F,
+                                 seasonal = T) # Suggests ARIMA(5, 1, 0)
+
+dayts_arima1 <- arima(dayts, order=c(5, 1, 0))
+arima_forecast1 <- forecast(dayts_arima1, h = 365)
+plot(arima_forecast1, include = 365) # quite bad
+
+dayts_arima2 <- arima(dayts, order=c(13, 1, 3)) # Best model by AIC, but not great
+arima_forecast2 <- forecast(dayts_arima2, h = 30)
+plot(arima_forecast2, include = 120) # so-so for next month, but wrong trend
+
+dayts_arima3 <- arima(dayts, order=c(13, 1, 0))
+arima_forecast3 <- forecast(dayts_arima3, h = 30)
+plot(arima_forecast3, include = 250) # same as above, but smoother
+
+# Try specifying seasonality
+
+dayts_arima4 <- arima(dayts, order=c(13, 1, 0),
+                      seasonal = )
+arima_forecast3 <- forecast(dayts_arima3, h = 30)
+plot(arima_forecast3, include = 250) # same as above, but smoother
+
+
+AIC(dayts_arima1, dayts_arima2, dayts_arima3)
+
+# ARIMA guess
+
+# TBATS is another option and can do a better job with multiple seasonalities... 
+dayts_tbats1 <- tbats(dayts)
+tbats_forecast1 <- forecast(dayts_tbats1, h = 120)
+plot(tbats_forecast1, include = 30) # pretty bad, just gets general weekly pattern
+
+# Try defining as multi-seasonal time series
+daymsts <- daily$total
+start_day = min(daily$date)
+end_day = max(daily$date)
+daymsts <- msts(daymsts,
+                start = c(as.numeric(format(start_day, "%Y")),
+                          as.numeric(format(start_day, "%j"))),
+                end = c(as.numeric(format(end_day, "%Y")),
+                        as.numeric(format(end_day, "%j"))),
+            seasonal.periods = c(7, 365))
+daymsts_tbats1 <- tbats(daymsts)
+tbats_forecast2 <- forecast(daymsts_tbats1, h = 30)
+plot(tbats_forecast2, include = 120) # still pretty bad except for near term forecasts
+
 
 # ML approaches ----
 

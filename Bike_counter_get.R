@@ -63,14 +63,7 @@ count <- count %>%
   mutate(date = as.Date(date),
          year = year(datetime))
 
-hourly_day = count %>%
-  mutate(hour = as.numeric(format(datetime, '%H')),
-         month = format(datetime, '%m')) %>%
-  group_by(year, month, day, hour, date) %>%
-  dplyr::summarise(total = sum(total),
-                   entries = sum(entries),
-                   exits = sum(exits))
-
+# Count by year, month, day of week, and hour of day
 hourly = count %>%
   mutate(hour = as.numeric(format(datetime, '%H')),
          month = format(datetime, '%m')) %>%
@@ -79,6 +72,16 @@ hourly = count %>%
                    entries = mean(entries),
                    exits = mean(exits))
 
+# Count by year, month, day of week, hour of day, for each day
+hourly_day = count %>%
+  mutate(hour = as.numeric(format(datetime, '%H')),
+         month = format(datetime, '%m')) %>%
+  group_by(year, month, day, hour, date) %>%
+  dplyr::summarise(total = sum(total),
+                   entries = sum(entries),
+                   exits = sum(exits))
+
+# Count by hour of day and month
 hourly_hour_month <- hourly %>%
   group_by(hour, month) %>%
   summarize(total = mean(total),
@@ -91,10 +94,10 @@ daily = count %>%
                    entries = sum(entries),
                    exits = sum(exits))
 
-max_day = daily %>% filter(total == max(total))
+max_day = daily %>% dplyr::filter(total == max(total))
 
-latest_day = daily %>% ungroup(daily) %>% filter(date == max(date))
-last_year_compare = daily %>% filter(date == paste(year(latest_day$date)-1, month(latest_day$date), day(latest_day$date), sep="-"))
+latest_day = daily %>% ungroup(daily) %>% dplyr::filter(date == max(date))
+last_year_compare = daily %>% dplyr::filter(date == paste(year(latest_day$date)-1, month(latest_day$date), day(latest_day$date), sep="-"))
 
 # Order day of week factor better
 # levels(daily$day_of_week)
@@ -104,17 +107,18 @@ daily$day_of_week <- as.factor(as.character(daily$day_of_week))
 levels(daily$day_of_week) <- c('Sunday', 'Monday', 'Tuesday', 'Wednesday',
                                'Thursday', 'Friday', 'Saturday')
 
+
 # Year to date
 latest_ytd = daily %>% 
   ungroup(daily) %>% 
-  filter(year == max(year)) %>%
+  dplyr::filter(year == max(year)) %>%
   dplyr::summarize(nrecord = n(), 
             ytd = sum(total))
 
 ytd_compare = daily %>% 
   ungroup(daily) %>%
-  filter(year == max(year)-1) %>%
-  filter(date <= paste(year(latest_day$date)-1, month(latest_day$date), day(latest_day$date), sep="-")) %>%
+  dplyr::filter(year == max(year)-1) %>%
+  dplyr::filter(date <= paste(year(latest_day$date)-1, month(latest_day$date), day(latest_day$date), sep="-")) %>%
   dplyr::summarize(nrecord = n(),
             ytd = sum(total))
 
@@ -126,12 +130,12 @@ weekly <- daily %>%
   dplyr::summarize(complete_week = length(total) == 7,
                    total = sum(total))
 
-max_week = weekly %>% filter(total == max(total)) # gives the max week of each year, since we did group_by year
+max_week = weekly %>% dplyr::filter(total == max(total)) # gives the max week of each year, since we did group_by year
 
 latest_complete_week = weekly %>% 
   ungroup(weekly) %>%
-  filter(year == max(year)) %>%
-  filter(complete_week == T) %>%
-  filter(weekofyear == max(weekofyear))
+  dplyr::filter(year == max(year)) %>%
+  dplyr::filter(complete_week == T) %>%
+  dplyr::filter(weekofyear == max(weekofyear))
 
-last_year_compare_week = weekly %>% filter(year == latest_complete_week$year-1, weekofyear == latest_complete_week$weekofyear)
+last_year_compare_week = weekly %>% dplyr::filter(year == latest_complete_week$year-1, weekofyear == latest_complete_week$weekofyear)
