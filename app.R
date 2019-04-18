@@ -23,6 +23,7 @@ ui <- fluidPage(
   mainPanel(
     plotlyOutput('plot1'),
     h4(textOutput('latest_text')),
+    h4(textOutput('guess_header_text')),
     h5(textOutput('reg_guess_text')),
     h5(textOutput('ts_guess_text')),
     h5(textOutput('rf_guess_text'))
@@ -80,28 +81,26 @@ server <- function(input, output, session) {
           latest_day[,input$ycol]
           )})
   
+  output$guess_header_text <- renderText({
+    paste0("Here are the best guesses of " , input$ycol,
+          " for tomorrow, ", 
+          tomorrow_dat$day[1], ", ",
+          tomorrow, ": ")
+    })
+  
   output$reg_guess_text <- renderText({
-    paste("Best regression model guess of total for tomorrow,", 
-          tomorrow_dat$day[1], 
-          tomorrow,
-          "is",
-          round(regression_guess, 0)
+    paste("Regression model: \t\t\t\t",
+          format(round(get(paste0('regression_guess_', input$ycol)), 0), big.mark = ",")
     )})
   
   output$ts_guess_text <- renderText({
-    paste("Best time series model guess of total for tomorrow,", 
-          tomorrow_dat$day[1], 
-          tomorrow,
-          "is",
-          round(ts_guess, 0)
+    paste("Time series model: \t\t\t\t", 
+          format(round(get(paste0('ts_guess_', input$ycol)), 0), big.mark = ",")
     )})
   
   output$rf_guess_text <- renderText({
-    paste("Best machine learning model guess of total for tomorrow,", 
-          tomorrow_dat$day[1], 
-          tomorrow,
-          "is",
-          round(rf_guess, 0)
+    paste("Machine learning model: \t\t\t\t", 
+          format(round(get(paste0('rf_guess_', input$ycol)), 0), big.mark = ",")
     )})
   
   session$allowReconnect(TRUE) # change to TRUE for server

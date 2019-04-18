@@ -46,7 +46,6 @@ fetchtimediff <- Sys.time() - fetchtime
 metrictime <- Sys.time()
 
 # read.socrata reads 'date' as date-time, all at midnight. Need to reformat as actualy date only, without time.
-count <- as_tibble(count)
 
 count <- count %>% 
   mutate(date = as.Date(date),
@@ -62,7 +61,7 @@ hourly_day = count %>%
                    exits = sum(exits))
 
 # Count by hour of day and month.  Used in the hourly view. 
-hourly_hour_month1 <- count %>%
+hourly_hour_month <- count %>%
   mutate(hour = as.numeric(format(datetime, '%H')),
          month = format(datetime, '%m')) %>%
   group_by(hour, month) %>%
