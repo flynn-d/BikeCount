@@ -18,6 +18,17 @@
 
 
 # System time zone: set in command line: sudo timedatectl set-timezone America/New_York
+gp = ggplot(daily,
+            aes_string(x = 'date', 
+                       y = as.name('total'), 
+                       color = 'day_of_week')) +
+  geom_point() + 
+  xlab('Date') +
+  theme_bw() 
+
+ggp <- ggplotly(gp) %>% layout(xaxis = list(rangeslider = list(type = "date") ) )
+
+ggp
 
 # Heat map: columns for months, rows for hour of day, color for count or intensity of riders
 
@@ -26,9 +37,7 @@ gp <- ggplot(hourly_hour_month, aes(x = as.numeric(hour), y = total, color = mon
   xlab('Hour of day') + ylab('Average count') + 
   theme_bw()
 
-ggplotly(gp, tooltip= c('total', 'month')) %>%
-  rangeslider()
-
+ggplotly(gp, tooltip= c('total', 'month')) %>% layout(xaxis = list(rangeslider = list(type = "date") ) )
 
 # Entries should be West bound -- much lower in 2016-2018, when Longfellow bridge was closed.
 # Exits is East bound, going in to boston
