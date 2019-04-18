@@ -1,10 +1,9 @@
 # Models to use for making guesses (i.e., model the data and forecast next day)
 
 # Guesses will be stored and compared with actual counts, and a running score will be kept
+# Data required: hourly_day data frame for ZINB and RF, daily for time series forecast
 
 # Setup ----
-library(tidyverse)
-library(MASS) # for negative binomial regression
 library(pscl) # for zero-inflated models
 library(randomForest)
 library(forecast)
