@@ -46,37 +46,41 @@ fetchtimediff <- Sys.time() - fetchtime
 metrictime <- Sys.time()
 
 # read.socrata reads 'date' as date-time, all at midnight. Need to reformat as actualy date only, without time.
-
+# Also, rename variables here -- still fetch and store with original
 count <- count %>% 
   mutate(date = as.Date(date),
-         year = format(datetime, '%Y'))
+         year = format(datetime, '%Y')) %>%
+  rename(Total = total,
+         Eastbound = exits,
+         Westbound = entries)
+
 
 # Count by year, month, day of week, hour of day, for each day. This is is the input for the ZINB and RF models.
 hourly_day = count %>%
   mutate(hour = as.numeric(format(datetime, '%H')),
          month = format(datetime, '%m')) %>%
   group_by(year, month, day, hour, date) %>%
-  dplyr::summarise(total = sum(total),
-                   entries = sum(entries),
-                   exits = sum(exits))
+  dplyr::summarise(Total = sum(Total),
+                   Westbound = sum(Westbound),
+                   Eastbound = sum(Eastbound))
 
 # Count by hour of day and month.  Used in the hourly view. 
 hourly_hour_month <- count %>%
   mutate(hour = as.numeric(format(datetime, '%H')),
          month = format(datetime, '%m')) %>%
   group_by(hour, month) %>%
-  summarize(total = mean(total),
-            entries = mean(entries),
-            exits = mean(exits))
+  summarize(Total = mean(Total),
+            Westbound = mean(Westbound),
+            Eastbound = mean(Eastbound))
 
 # Daily summary, no hourly breakdown. This is used in the default daily view, the day of week view, and the time series model.
 daily = count %>%
   group_by(year, date, day_of_week = as.factor(day)) %>%
-  dplyr::summarise(total = sum(total),
-                   entries = sum(entries),
-                   exits = sum(exits))
+  dplyr::summarise(Total = sum(Total),
+                   Westbound = sum(Westbound),
+                   Eastbound = sum(Eastbound))
 
-max_day = daily %>% dplyr::filter(total == max(total))
+max_day = daily %>% dplyr::filter(Total == max(Total))
 
 latest_day = daily %>% ungroup(daily) %>% dplyr::filter(date == max(date))
 

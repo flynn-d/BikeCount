@@ -9,7 +9,7 @@
 # Daily
 # ideas: interactive time series plots with different time units as options on x: 
 # date, day of week, year
-# y: entries, exits, total
+# y: Westbound, Eastbound, Total
 
 # Hourly
 # Hour along x
@@ -17,20 +17,20 @@
 # drop-down filter for year... with compare?
 
 # Metrics moved from Bike_counter_get, since we're not using these right now.
-# Day with the most total rides: max_day
+# Day with the most Total rides: max_day
 # Week with most todal rides: max_week
 # Today compared to same day last year: latest_day and last_year_compare
 # Last week compared to same week last year: latest_complete_week and last_year_compare_week
-# Year to date total trips and last year's comparison value: latest_ytd and ytd_compare
+# Year to date Total trips and last year's comparison value: latest_ytd and ytd_compare
 
 # Count by year, month, day of week, and hour of day.
 hourly = count %>%
   mutate(hour = as.numeric(format(datetime, '%H')),
          month = format(datetime, '%m')) %>%
   group_by(year, month, day, hour) %>%
-  dplyr::summarise(total = mean(total),
-                   entries = mean(entries),
-                   exits = mean(exits))
+  dplyr::summarise(Total = mean(Total),
+                   Westbound = mean(Westbound),
+                   Eastbound = mean(Eastbound))
 
 last_year_compare = daily %>% dplyr::filter(date == paste(as.numeric(format(latest_day$date, '%Y'))-1, format(latest_day$date, '%m'), format(latest_day$date, '%d'), sep="-"))
 
@@ -39,24 +39,24 @@ latest_ytd = daily %>%
   ungroup(daily) %>% 
   dplyr::filter(year == max(year)) %>%
   dplyr::summarize(nrecord = n(), 
-                   ytd = sum(total))
+                   ytd = sum(Total))
 
 ytd_compare = daily %>% 
   ungroup(daily) %>%
   dplyr::filter(year == max(as.numeric(year))-1) %>%
   dplyr::filter(date <= paste(as.numeric(format(latest_day$date, '%Y'))-1, format(latest_day$date, '%m'), format(latest_day$date, '%d'), sep="-")) %>%
   dplyr::summarize(nrecord = n(),
-                   ytd = sum(total))
+                   ytd = sum(Total))
 
 # Weekly counts and comparison
 
 weekly <- daily %>%
   mutate(weekofyear = format(date, '%U')) %>%
   group_by(year, weekofyear) %>%
-  dplyr::summarize(complete_week = length(total) == 7,
-                   total = sum(total))
+  dplyr::summarize(complete_week = length(Total) == 7,
+                   Total = sum(Total))
 
-max_week = weekly %>% dplyr::filter(total == max(total)) # gives the max week of each year, since we did group_by year
+max_week = weekly %>% dplyr::filter(Total == max(Total)) # gives the max week of each year, since we did group_by year
 
 latest_complete_week = weekly %>% 
   ungroup(weekly) %>%
@@ -70,7 +70,7 @@ last_year_compare_week = weekly %>% dplyr::filter(year == as.numeric(latest_comp
 # System time zone: set in command line: sudo timedatectl set-timezone America/New_York
 gp = ggplot(daily,
             aes_string(x = 'date', 
-                       y = as.name('total'), 
+                       y = as.name('Total'), 
                        color = 'day_of_week')) +
   geom_point() + 
   xlab('Date') +
@@ -82,37 +82,38 @@ ggp
 
 # Heat map: columns for months, rows for hour of day, color for count or intensity of riders
 
-gp <- ggplot(hourly_hour_month, aes(x = as.numeric(hour), y = total, color = month)) +
+gp <- ggplot(hourly_hour_month, aes(x = as.numeric(hour), y = Total, color = month)) +
   geom_point() + geom_smooth(se = F, span = 0.3) +
   xlab('Hour of day') + ylab('Average count') + 
   theme_bw()
 
-ggplotly(gp, tooltip= c('total', 'month')) %>% layout(xaxis = list(rangeslider = list(type = "date") ) )
+ggplotly(gp, tooltip= c('Total', 'month')) %>% layout(xaxis = list(rangeslider = list(type = "date") ) )
 
-# Entries should be West bound -- much lower in 2016-2018, when Longfellow bridge was closed.
-# Exits is East bound, going in to boston
+# Westbound should be West bound -- much lower in 2016-2018, when Longfellow bridge was closed.
+# Eastbound is East bound, going in to boston
+# Confirmed by comparing with the source https://data.cambridgema.gov/dataset/Eco-Totem-Broadway-Bicycle-Counts-by-Date/9yzv-hx4u
 
 daily %>%
   group_by(year) %>%
-  summarize(mean(entries),
-            mean(exits))
+  summarize(mean(Westbound),
+            mean(Eastbound))
 
 
 # Weekly view
 day_of_week = daily %>%
   group_by(year, day_of_week) %>%
-  dplyr::summarize(total = mean(total, na.rm=T),
-                   entries = mean(entries, na.rm=T),
-                   exits = mean(exits, na.rm=T))
+  dplyr::summarize(Total = mean(Total, na.rm=T),
+                   Westbound = mean(Westbound, na.rm=T),
+                   Eastbound = mean(Eastbound, na.rm=T))
 
-ggplot(daily, aes(x = day_of_week, y = total, group = year)) + 
+ggplot(daily, aes(x = day_of_week, y = Total, group = year)) + 
   geom_point()
 
-gp <- ggplot(daily, aes(x = day_of_week, y = total, color = as.factor(year))) +
+gp <- ggplot(daily, aes(x = day_of_week, y = Total, color = as.factor(year))) +
   geom_point(aes(text = date)) +
   xlab('Day of week') + 
   theme_bw()
 
-ggplotly(gp, tooltip= c('total', 'date'))
+ggplotly(gp, tooltip= c('Total', 'date'))
 
   

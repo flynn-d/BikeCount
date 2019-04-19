@@ -36,31 +36,31 @@ load('Random_forest_models.RData')
 # Standard regression approaches ----
 # zero-inflated negative binomial
 if(REFIT){
-  hourly_mod6 <- zeroinfl(total ~ day + fhour + fyear + fmonth, 
+  hourly_mod6 <- zeroinfl(Total ~ day + fhour + fyear + fmonth, 
                           data = hourly_day,
                           dist = 'negbin')
-  hourly_mod6_entries <- zeroinfl(entries ~ day + fhour + fyear + fmonth, 
+  hourly_mod6_Westbound <- zeroinfl(Westbound ~ day + fhour + fyear + fmonth, 
                           data = hourly_day,
                           dist = 'negbin')
-  hourly_mod6_exits <- zeroinfl(exits ~ day + fhour + fyear + fmonth, 
+  hourly_mod6_Eastbound <- zeroinfl(Eastbound ~ day + fhour + fyear + fmonth, 
                           data = hourly_day,
                           dist = 'negbin')
   
-  save(list = c('hourly_mod6', 'hourly_mod6_entries', 'hourly_mod6_exits'),
+  save(list = c('hourly_mod6', 'hourly_mod6_Westbound', 'hourly_mod6_Eastbound'),
        file = 'Regression_models.RData')
 }
 
 # Guess tomorrow
-tomorrow_dat$total <- predict(hourly_mod6, tomorrow_dat, type = "response")
-tomorrow_dat$exits <- predict(hourly_mod6_exits, tomorrow_dat, type = "response")
-tomorrow_dat$entries <- predict(hourly_mod6_entries, tomorrow_dat, type = "response")
+tomorrow_dat$Total     <- predict(hourly_mod6, tomorrow_dat, type = "response")
+tomorrow_dat$Eastbound <- predict(hourly_mod6_Eastbound, tomorrow_dat, type = "response")
+tomorrow_dat$Westbound <- predict(hourly_mod6_Westbound, tomorrow_dat, type = "response")
 
-regression_guess_total <- sum(tomorrow_dat$total)  
-regression_guess_entries <- sum(tomorrow_dat$entries)  
-regression_guess_exits <- sum(tomorrow_dat$exits)  
+regression_guess_Total     <- sum(tomorrow_dat$Total)  
+regression_guess_Westbound <- sum(tomorrow_dat$Westbound)  
+regression_guess_Eastbound <- sum(tomorrow_dat$Eastbound)  
 
 # Time series approaches ----
-dayts <- daily$total
+dayts <- daily$Total
 start_day = min(daily$date)
 end_day = max(daily$date)
 dayts <- ts(dayts, 
@@ -72,11 +72,11 @@ dayts <- ts(dayts,
 
 # Holt-Winter exponential smoothing
 dayts_forecasts <- HoltWinters(dayts, beta=NULL, gamma=NULL)
-ts_guess_total <- forecast(dayts_forecasts, h = 1)
-ts_guess_total <- as.numeric(ts_guess_total$mean)
+ts_guess_Total <- forecast(dayts_forecasts, h = 1)
+ts_guess_Total <- as.numeric(ts_guess_Total$mean)
 
-# Repeat, for entries
-dayts <- daily$entries
+# Repeat, for Westbound
+dayts <- daily$Westbound
 start_day = min(daily$date)
 end_day = max(daily$date)
 dayts <- ts(dayts, 
@@ -86,12 +86,12 @@ dayts <- ts(dayts,
                     as.numeric(format(end_day, "%j"))),
             frequency = 365)
 
-dayts_forecasts <- HoltWinters(dayts, beta=NULL, gamma=NULL)
-ts_guess_entries <- forecast(dayts_forecasts, h = 1)
-ts_guess_entries <- as.numeric(ts_guess_entries$mean)
+dayts_forecasts    <- HoltWinters(dayts, beta=NULL, gamma=NULL)
+ts_guess_Westbound <- forecast(dayts_forecasts, h = 1)
+ts_guess_Westbound <- as.numeric(ts_guess_Westbound$mean)
 
-# Repeat, for exits
-dayts <- daily$exits
+# Repeat, for Eastbound
+dayts <- daily$Eastbound
 start_day = min(daily$date)
 end_day = max(daily$date)
 dayts <- ts(dayts, 
@@ -101,9 +101,9 @@ dayts <- ts(dayts,
                     as.numeric(format(end_day, "%j"))),
             frequency = 365)
 
-dayts_forecasts <- HoltWinters(dayts, beta=NULL, gamma=NULL)
-ts_guess_exits <- forecast(dayts_forecasts, h = 1)
-ts_guess_exits <- as.numeric(ts_guess_exits$mean)
+dayts_forecasts    <- HoltWinters(dayts, beta=NULL, gamma=NULL)
+ts_guess_Eastbound <- forecast(dayts_forecasts, h = 1)
+ts_guess_Eastbound <- as.numeric(ts_guess_Eastbound$mean)
 
 # ML approaches ----
 
@@ -112,7 +112,7 @@ if(REFIT){
   library(doParallel)
   
   train.dat = hourly_day
-  response.var = c('total', 'entries', 'exits') 
+  response.var = c('Total', 'Westbound', 'Eastbound') 
   class(train.dat) = 'data.frame' # drop grouped_df, tbl
   
   avail.cores = parallel::detectCores()
@@ -147,26 +147,31 @@ if(REFIT){
   rf.out <- foreach(ntree = rep(rf.inputs$ntree.use/rf.inputs$avail.cores, rf.inputs$avail.cores),
                     .combine = randomForest::combine, .multicombine=T, .packages = 'randomForest') %dopar% 
     randomForest(x = rundat[,fitvars], y = rundat[,response.var[i]], 
-                 ntree = ntree, mtry = mtry.use, 
+                 ntree = ntree, mtry = rf.inputs$mtry, 
                  maxnodes = rf.inputs$maxnodes, nodesize = rf.inputs$nodesize,
                  keep.forest = T)
   
+  # Some diagnostics
+  rf.pred <- predict(rf.out, test.dat.use[fitvars], type = 'response')
+  
+  ( rmse = sqrt( 
+              mean(
+                c( as.numeric(as.character(test.dat.use[,response.var[i]])) - as.numeric(rf.pred) ) ^2 ) ) )
+  
   assign(paste0('rf_mod_', response.var[i]), rf.out)
+  assign(paste0('rf_pred_', response.var[i]), rf.pred)
+  assign(paste0('rf_rmse_', response.var[i]), rmse)
   }
   stopCluster(cl); rm(cl); gc(verbose = F) # Stop the cluster immediately after finished the RF
   
   timediff = Sys.time() - starttime
   cat(round(timediff,2), attr(timediff, "unit"), "to fit RF models \n")
   
-  # # Some diagnostics
-  # rf.prob <- predict(rf.out, test.dat.use[fitvars])
-  # 
-  # ( mse = mean(as.numeric(as.character(test.dat.use[,response.var])) - 
-  #              as.numeric(rf.prob))^2 )
-  
   rfmods = ls()[grep('rf_mod_', ls())]
+  rfpreds = ls()[grep('rf_pred_', ls())]
+  rfrmses= ls()[grep('rf_rmse_', ls())]
   
-  save(list = c('fitvars', 'rundat', rfmods),
+  save(list = c('fitvars', 'rundat', rfmods, rfpreds, rfrmses),
        file = 'Random_forest_models.RData')
 } 
 # Make a guess with the RF model. Tomorrow_dat factors have to have the same levels as in the rundat, so need to add the empty levels
@@ -182,12 +187,12 @@ for(i in fitvars) {
   tomorrow_dat[,i] = levadd(factor_var = i) 
   }
 
-tomorrow_dat$total_RF <- predict(rf_mod_total, tomorrow_dat[,fitvars])
-tomorrow_dat$entries_RF <- predict(rf_mod_entries, tomorrow_dat[,fitvars])
-tomorrow_dat$exits_RF <- predict(rf_mod_exits, tomorrow_dat[,fitvars])
+tomorrow_dat$Total_RF     <- predict(rf_mod_Total, tomorrow_dat[,fitvars])
+tomorrow_dat$Westbound_RF <- predict(rf_mod_Westbound, tomorrow_dat[,fitvars])
+tomorrow_dat$Eastbound_RF <- predict(rf_mod_Eastbound, tomorrow_dat[,fitvars])
 
-rf_guess_total <- sum(tomorrow_dat$total_RF)
-rf_guess_entries <- sum(tomorrow_dat$entries_RF)
-rf_guess_exits <- sum(tomorrow_dat$exits_RF)
+rf_guess_Total     <- sum(tomorrow_dat$Total_RF)
+rf_guess_Westbound <- sum(tomorrow_dat$Westbound_RF)
+rf_guess_Eastbound <- sum(tomorrow_dat$Eastbound_RF)
 
 # next: store these guesses, display on dashboard
