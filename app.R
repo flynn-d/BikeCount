@@ -3,8 +3,13 @@ library(ggplot2)
 library(plotly)
 source('Bike_counter_get.R')
 source('Make_guesses.R')
+source('Helper_fx.R')
 
 ui <- fluidPage(
+
+  tags$div(
+    HTML(octocat_badge) # from Helper_fx.R
+    ),
   titlePanel('Bike count data'),
   sidebarPanel(
     radioButtons("view", "View data by:",
@@ -14,8 +19,8 @@ ui <- fluidPage(
     
     selectInput('ycol', 
                 'Y Variable', 
-                c('exits','entries','total'),
-                selected = 'total'),
+                c('Eastbound','Westbound','Total'),
+                selected = 'Total'),
     
      helpText(paste("Last updated", Sys.time()), br(),
               paste("Latest data from", latest_day$date))
@@ -23,6 +28,7 @@ ui <- fluidPage(
   mainPanel(
     plotlyOutput('plot1'),
     h4(textOutput('latest_text')),
+    h4(textOutput('guess_header_text')),
     h5(textOutput('reg_guess_text')),
     h5(textOutput('ts_guess_text')),
     h5(textOutput('rf_guess_text'))
@@ -77,31 +83,29 @@ server <- function(input, output, session) {
           latest_day$day_of_week,
           latest_day$date,
           "was",
-          latest_day[,input$ycol]
+          format(as.numeric(latest_day[,input$ycol]), big.mark = ",")
           )})
   
+  output$guess_header_text <- renderText({
+    paste0("Here are the best guesses of " , input$ycol,
+          " for tomorrow, ", 
+          tomorrow_dat$day[1], ", ",
+          tomorrow, ": ")
+    })
+  
   output$reg_guess_text <- renderText({
-    paste("Best regression model guess of total for tomorrow,", 
-          tomorrow_dat$day[1], 
-          tomorrow,
-          "is",
-          round(regression_guess, 0)
+    paste("Regression model: \t\t\t\t",
+          format(round(get(paste0('regression_guess_', input$ycol)), 0), big.mark = ",")
     )})
   
   output$ts_guess_text <- renderText({
-    paste("Best time series model guess of total for tomorrow,", 
-          tomorrow_dat$day[1], 
-          tomorrow,
-          "is",
-          round(ts_guess, 0)
+    paste("Time series model: \t\t\t\t", 
+          format(round(get(paste0('ts_guess_', input$ycol)), 0), big.mark = ",")
     )})
   
   output$rf_guess_text <- renderText({
-    paste("Best machine learning model guess of total for tomorrow,", 
-          tomorrow_dat$day[1], 
-          tomorrow,
-          "is",
-          round(rf_guess, 0)
+    paste("Machine learning model: \t\t\t\t", 
+          format(round(get(paste0('rf_guess_', input$ycol)), 0), big.mark = ",")
     )})
   
   session$allowReconnect(TRUE) # change to TRUE for server
