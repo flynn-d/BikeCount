@@ -12,7 +12,11 @@ library(dplyr)
 # We will increment the historical data daily
 if(length(grep("BikeCountHist.RData", dir()))==0){
   hist_count <- read.socrata("https://data.cambridgema.gov/resource/gxzm-dpwp.csv")
-  save("hist_count", file = "BikeCountHist.RData")
+  hist_count <- hist_count[order(hist_count$datetime),]
+  original_rownum <- nrow(hist_count)
+  hist_count <- hist_count[!duplicated(hist_count[,c('datetime','day','entries','exits','total')]),]
+  dedup_rownum <- nrow(hist_count); dup_rows = original_rownum - dedup_rownum
+  save(list=c("hist_count", "dup_rows"), file = "BikeCountHist.RData")
 } else { load("BikeCountHist.RData") }
 
 rows_hist <- nrow(hist_count)
@@ -21,7 +25,7 @@ last_day <- max(hist_count$date)
 # Try to get fresher data. Defaults to hist_count if nothing fresher found.
 if(Sys.Date() > as.Date(last_day)){
   # Combine order and offset. Default is to order new to old, while our RSocrata query returns results old to new.
-  response <- httr::GET(paste0("https://data.cambridgema.gov/resource/gxzm-dpwp.csv?$order=date&$offset=", rows_hist))
+  response <- httr::GET(paste0("https://data.cambridgema.gov/resource/gxzm-dpwp.csv?$order=date&$offset=", rows_hist + dup_rows))
   
   # read_csv parses datetime, so need to provide correct time zone as well
   r_df <- readr::read_csv(httr::content(response, 
@@ -34,12 +38,18 @@ if(Sys.Date() > as.Date(last_day)){
   # Check to see if there is actually new data or if just delayed compared to Sys.Date()
   if(nrow(r_df) > 0){
     new_count <- as.data.frame(r_df)
+    new_count <- new_count[order(new_count$datetime),]
+    original_rownum <- nrow(new_count)
+    new_count <- new_count[!duplicated(new_count[,c('datetime','day','entries','exits','total')]),]
+    new_dedup_rownum <- nrow(new_count); new_dup_rows = original_rownum - new_dedup_rownum
+    dup_rows = dup_rows + new_dup_rows
+
     hist_count <- rbind(hist_count, new_count)
     count <- hist_count
   } else { 
       count <- hist_count }
 }
-save(list=c('hist_count'), file = 'BikeCountHist.RData')
+save(list=c('hist_count', 'dup_rows'), file = 'BikeCountHist.RData')
 fetchtimediff <- Sys.time() - fetchtime
 
 # Get some metrics ----
@@ -59,7 +69,7 @@ count <- count %>%
 hourly_day = count %>%
   mutate(hour = as.numeric(format(datetime, '%H')),
          month = format(datetime, '%m')) %>%
-  group_by(year, month, day, hour, date) %>%
+  group_by(year, date, month, day, hour) %>%
   dplyr::summarise(Total = sum(Total),
                    Westbound = sum(Westbound),
                    Eastbound = sum(Eastbound))

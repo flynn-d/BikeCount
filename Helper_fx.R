@@ -2,11 +2,23 @@
 
 # Detect gaps, interpolate values for missing data if the gap is small
 
-# Can run on hist_count in initial data collection or on new_count when incrementing
-
-fill_gaps <- function(){
-
-  }
+# Aim to run on hist_count in initial data collection or on new_count when incrementing
+# also... there are duplicates! need to filter out for double-counted data.
+# Ok, for now, not filling gaps, just deleting duplicate rows. Consider imputation later.
+NOTRUN = T
+if(!NOTRUN){
+# fill_gaps <- function(count_dat = hist_count){
+    count_dat <- count_dat[order(count_dat$datetime),]
+    # detect any gaps, e.g. count_dat %>% filter(date > '2017-07-29' & date < '2017-08-02')
+    dt <- diff(count_dat$date)
+    dt_gaps <- which(as.numeric(dt, 'days') > 1.05)
+    count_dat[dt_gaps,]
+    
+    count_dat[73594:(73594+70),]
+    
+    as.numeric(diff(count_dat[37171:(37171+24),'date']), 'days')
+  
+}
   
 # Not a function, but a snippet to make an animated 'Fork Me' badge in the dashboard
 # From https://codepen.io/Rplus/pen/wKZOBo
