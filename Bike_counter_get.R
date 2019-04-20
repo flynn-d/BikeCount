@@ -1,23 +1,33 @@
 # Bike counter API on Broadway, Cambridge MA
 
-# https://data.cambridgema.gov/resource/gxzm-dpwp.json
+# https://data.cambridgema.gov/resource/gxzm-dpwp.json # Broadway
+# https://data.cambridgema.gov/resource/gqic-86ts.json # Hampshire, 6 months of data, not formatted the same as Broadway
+# https://data.edmonton.ca/resource/tq23-qn4m.json # Edmonton
+
 fetchtime <- Sys.time()
-# source('get_dependencies.R') # Run this once on a new instance, may be time-consuming 
 library(RSocrata)
 library(dplyr)
 
 # Grab data from API ----
 
-# Load historical count once. Takes 7s initially to download, vs. 0.1s to load from working directory. 
+api_get <- 'https://data.cambridgema.gov/resource/gxzm-dpwp.csv' # this will be a variable that the user selects by selecting a station or city name
+
+pattern <- ".{9}(?=\\.csv$|\\.json)" # perl=TRUE
+parse_socrata_ID <- regexpr(pattern, api_get, perl = T)
+socrata_ID <- substring(api_get, first = parse_socrata_ID, last = parse_socrata_ID + attr(parse_socrata_ID, 'match.length') - 1)
+
+# Load historical count once. Takes 7s initially to download, vs. 0.1s to load from working directory
+hist_count_name = paste0("BikeCountHist_", socrata_ID, ".RData")
+
 # We will increment the historical data daily
-if(length(grep("BikeCountHist.RData", dir()))==0){
-  hist_count <- read.socrata("https://data.cambridgema.gov/resource/gxzm-dpwp.csv")
+if(length(grep(hist_count_name, dir()))==0){
+  hist_count <- read.socrata(api_get)
   hist_count <- hist_count[order(hist_count$datetime),]
   original_rownum <- nrow(hist_count)
   hist_count <- hist_count[!duplicated(hist_count[,c('datetime','day','entries','exits','total')]),]
   dedup_rownum <- nrow(hist_count); dup_rows = original_rownum - dedup_rownum
-  save(list=c("hist_count", "dup_rows"), file = "BikeCountHist.RData")
-} else { load("BikeCountHist.RData") }
+  save(list=c("hist_count", "dup_rows"), file = hist_count_name)
+} else { load(hist_count_name) }
 
 rows_hist <- nrow(hist_count)
 last_day <- max(hist_count$date)
@@ -25,16 +35,17 @@ last_day <- max(hist_count$date)
 # Try to get fresher data. Defaults to hist_count if nothing fresher found.
 if(Sys.Date() > as.Date(last_day)){
   # Combine order and offset. Default is to order new to old, while our RSocrata query returns results old to new.
-  response <- httr::GET(paste0("https://data.cambridgema.gov/resource/gxzm-dpwp.csv?$order=date&$offset=", rows_hist + dup_rows))
+  response <- httr::GET(paste0(api_get, "?$order=date&$offset=", rows_hist + dup_rows))
   
-  # read_csv parses datetime, so need to provide correct time zone as well
-  r_df <- readr::read_csv(httr::content(response, 
-                                        as = "text", 
-                                        type = "text/csv", 
-                                        encoding = "utf-8"),
-                 locale = readr::locale(tz = 'America/New_York')
-                 )
-  
+  if(grepl('csv', api_get)){
+    # read_csv parses datetime, so need to provide correct time zone as well
+    r_df <- readr::read_csv(httr::content(response, 
+                                          as = "text", 
+                                          type = "text/csv", 
+                                          encoding = "utf-8"),
+                   locale = readr::locale(tz = 'America/New_York')
+                   )
+  }  
   # Check to see if there is actually new data or if just delayed compared to Sys.Date()
   if(nrow(r_df) > 0){
     new_count <- as.data.frame(r_df)
@@ -49,21 +60,23 @@ if(Sys.Date() > as.Date(last_day)){
   } else { 
       count <- hist_count }
 }
-save(list=c('hist_count', 'dup_rows'), file = 'BikeCountHist.RData')
+save(list=c('hist_count', 'dup_rows'), file = hist_count_name)
 fetchtimediff <- Sys.time() - fetchtime
 
 # Get some metrics ----
 metrictime <- Sys.time()
 
 # read.socrata reads 'date' as date-time, all at midnight. Need to reformat as actualy date only, without time.
-# Also, rename variables here -- still fetch and store with original
+# Also, rename variables here -- still fetch and store with original. Ensure they are numeric
 count <- count %>% 
   mutate(date = as.Date(date),
          year = format(datetime, '%Y')) %>%
   rename(Total = total,
          Eastbound = exits,
-         Westbound = entries)
-
+         Westbound = entries) %>%
+  mutate(Total = as.numeric(Total),
+         Eastbound = as.numeric(Eastbound),
+         Westbound = as.numeric(Westbound))
 
 # Count by year, month, day of week, hour of day, for each day. This is is the input for the ZINB and RF models.
 hourly_day = count %>%

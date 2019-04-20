@@ -10,6 +10,16 @@ library(forecast)
 
 REFIT = F # Set to T to re-fit the regression and ML models
 
+# Load historical weather, then forecast weather
+hist_wx_file_name = paste0('Hist_WX_', socrata_ID, '.RData')
+
+if(file.exists(hist_wx_file_name)){
+  load(hist_wx_file_name) 
+  } else {
+  hist_wx1 <- get_historical_wx(limit_1000 = T, chunk = NA)
+  save("hist_wx1", file = hist_wx_file_name)
+  }
+
 # create 'tomorrow' data to guess on
 today <- Sys.Date()
 tomorrow <- today + 1
@@ -72,7 +82,7 @@ dayts <- ts(dayts,
 
 # Holt-Winter exponential smoothing
 dayts_forecasts <- HoltWinters(dayts, beta=NULL, gamma=NULL)
-ts_guess_Total <- forecast(dayts_forecasts, h = 1)
+ts_guess_Total <- forecast(dayts_forecasts, h = 1) # need to change to 2 for today and tomorrow
 ts_guess_Total <- as.numeric(ts_guess_Total$mean)
 
 # Repeat, for Westbound
