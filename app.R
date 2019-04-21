@@ -1,9 +1,11 @@
 rm(list=ls())
 library(ggplot2)
 library(plotly)
+# source('get_dependencies.R') # Run this once on a new instance, may be time-consuming 
+source('Helper_fx.R')
 source('Bike_counter_get.R')
 source('Make_guesses.R')
-source('Helper_fx.R')
+
 
 ui <- fluidPage(
 
