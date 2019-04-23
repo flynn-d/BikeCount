@@ -1,12 +1,176 @@
 # Helper functions for bike_counter_get
+library(jsonlite)
+
+# Define station characteristics. Will define these for each station
+station_meta = data.frame(
+  url = 'https://data.cambridgema.gov/resource/gxzm-dpwp.csv',
+  name = 'Broadway',
+  id_name = NA, # To be used when there is a station ID inside the data
+  city_state = 'Cambridge, MA',
+  lat = 42.363464,
+  lon = -71.086202,
+  Total = 'total',
+  dir1 = 'exits',
+  dir2 = 'entries',
+  dir1name = 'Eastbound',
+  dir2name = 'Westbound',
+  tz = 'America/New_York')
+
+# Get historical weather for a station from DarkSky. Must have a DarkSky API key. Assumes Bike_counter_get.R has already been run and 'api_get' and 'daily' are in working memory 
+get_historical_wx <- function(limit_1000 = F, chunk = c(NA, 'iter_date_range2')){
+  # Get key.
+  if(!exists('key')) key = scan('../keys/DarkSky_Key.txt', what = 'character')
+  # Get lat and long from station_meta
+  ll = station_meta %>% filter(url == api_get) %>% select(lat, lon)
+  tz = station_meta %>% filter(url == api_get) %>% select(tz)
+  
+  # Find date range to look obtain
+  hist_date_range <- range(daily$date)
+
+  iter_date_range = seq(hist_date_range[1], hist_date_range[2], by = 1)
+  
+  # If limiting to 1000 queries, get the appropriate 1000 query chunk
+  if(limit_1000){
+    # Make this more flexible at some point, works for now
+    if(length(iter_date_range) > 1000 & length(iter_date_range) <= 2000) {
+      iter_date_range2 = iter_date_range[1001:length(iter_date_range)]
+      iter_date_range = iter_date_range[1:1000]
+    }
+    
+    if(!is.na(chunk)){
+      iter_date_range = get(chunk)
+      }
+    } 
+  
+  hist_wx <- vector()
+  for(i in 1:length(iter_date_range)){ # i = 1
+    query_time = format(
+                        as.numeric(
+                                   as.POSIXct(as.character(iter_date_range[i]), format = '%F', tz = as.character(tz$tz))
+                                   ), 
+                        scientific = F)
+    
+    query = paste('https://api.darksky.net/forecast',
+                   key, 
+                   paste(as.numeric(ll[1]), as.numeric(ll[2]), query_time, sep = ','),
+                   sep = '/')
+    
+    hist_response <- fromJSON(query)
+    
+    # Add any additional columns if new ones found in this iteration.
+    # Since hist_response can have different columns, just use full_join with no messages rather than specifying columns with 'by'.
+    if(i == 1) { 
+      hist_wx = hist_response$hourly$data
+    } else {
+      hist_wx <- suppressMessages( full_join(hist_wx, hist_response$hourly$data) )
+    }
+  if(i %% 100 == 0) cat(as.character(iter_date_range[i]), " . ")
+  }
+  
+  # Format datetime
+  hist_wx <- hist_wx %>%
+    mutate(datetime = as.POSIXct(time, origin = '1970-01-01', tz = as.character(tz$tz)),
+           date = format(datetime, '%F'),
+           year = format(datetime, '%Y'),
+           month = format(datetime, '%m'),
+           day = format(datetime, '%A'),
+           hour = format(datetime, '%H'))
+  
+  # Prepare variable types and fill NA with zero for specific columns
+  hist_wx <- hist_wx %>% 
+    mutate(date = as.Date(date),
+           hour = as.numeric(hour),
+           day = as.character(day)) %>%
+    tidyr::replace_na(list(precipIntensity = 0,
+                           precipProbability = 0,
+                           precipAccumulation = 0,
+                           precipType = 'None'))
+  
+  hist_wx
+  }
+
+# Get current and forecast weather 
+get_curr_forecast_wx <- function(){
+  # Get key.
+  if(!exists('key')) key = scan('../keys/DarkSky_Key.txt', what = 'character')
+  # Get lat and long from station_meta
+  ll = station_meta %>% filter(url == api_get) %>% select(lat, lon)
+  tz = station_meta %>% filter(url == api_get) %>% select(tz)
+  
+  # Find date range to obtain: Start from last day in hist_wx (or today, whichever is minimum, and go to tomorrow
+  last_day_in_hist = max(as.Date(hist_wx$date))
+  start_day = min(Sys.Date(), last_day_in_hist)
+  get_date_range <- c(start_day, Sys.Date() + 1)
+  
+  if(length(get_date_range) > 2) {
+    iter_date_range = seq(get_date_range[1], get_date_range[2], by = 1) 
+    } else { iter_date_range = get_date_range }
+  
+  curr_wx <- vector()
+  for(i in 1:length(iter_date_range)){ # i = 1
+    query_time = format(
+      as.numeric(
+        as.POSIXct(as.character(iter_date_range[i]), format = '%F', tz = as.character(tz$tz))
+      ), 
+      scientific = F)
+    
+    query = paste('https://api.darksky.net/forecast',
+                  key, 
+                  paste(as.numeric(ll[1]), as.numeric(ll[2]), query_time, sep = ','),
+                  sep = '/')
+    
+    curr_response <- fromJSON(query)
+    
+    # Add any additional columns if new ones found in this iteration.
+    # Since hist_response can have different columns, just use full_join with no messages rather than specifying columns with 'by'.
+    if(i == 1) { 
+      curr_wx = curr_response$hourly$data
+    } else {
+      curr_wx <- suppressMessages( full_join(curr_wx, curr_response$hourly$data) )
+    }
+  }
+  
+  # Format datetime
+  curr_wx <- curr_wx %>%
+    mutate(datetime = as.POSIXct(time, origin = '1970-01-01', tz = as.character(tz$tz)),
+           date = format(datetime, '%F'),
+           year = format(datetime, '%Y'),
+           month = format(datetime, '%m'),
+           day = format(datetime, '%A'),
+           hour = format(datetime, '%H'))
+  
+  # Prepare variable types and fill NA with zero for specific columns
+  curr_wx <- curr_wx %>% 
+    mutate(date = as.Date(date),
+           hour = as.numeric(hour),
+           day = as.character(day)) %>%
+    tidyr::replace_na(list(precipIntensity = 0,
+                           precipProbability = 0,
+                           precipType = 'None'))
+  
+  curr_wx
+}
+# as.POSIXct(1555902000, origin = '1970-01-01', tz = 'America/New_York') 
 
 # Detect gaps, interpolate values for missing data if the gap is small
 
-# Can run on hist_count in initial data collection or on new_count when incrementing
-
-fill_gaps <- function(){
-
-  }
+# Aim to run on hist_count in initial data collection or on new_count when incrementing
+# also... there are duplicates! need to filter out for double-counted data.
+# Ok, for now, not filling gaps, just deleting duplicate rows. Consider imputation later.
+NOTRUN = T
+if(!NOTRUN){
+# fill_gaps <- function(count_dat = hist_count){
+    count_dat <- count_dat[order(count_dat$datetime),]
+    # detect any gaps, e.g. count_dat %>% filter(date > '2017-07-29' & date < '2017-08-02')
+    dt <- diff(count_dat$date)
+    dt_gaps <- which(as.numeric(dt, 'days') > 1.05)
+    count_dat[dt_gaps,]
+    
+    count_dat[73594:(73594+70),]
+    
+    as.numeric(diff(count_dat[37171:(37171+24),'date']), 'days')
+  
+}
   
 # Not a function, but a snippet to make an animated 'Fork Me' badge in the dashboard
 # From https://codepen.io/Rplus/pen/wKZOBo
