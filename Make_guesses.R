@@ -16,9 +16,14 @@ hist_wx_file_name = paste0('Hist_WX_', socrata_ID, '.RData')
 if(file.exists(hist_wx_file_name)){
   load(hist_wx_file_name) 
   } else {
-  hist_wx1 <- get_historical_wx(limit_1000 = T, chunk = NA)
-  save("hist_wx1", file = hist_wx_file_name)
+  hist_wx <- get_historical_wx()
+  save("hist_wx", file = hist_wx_file_name)
   }
+
+# Get forecasted weather, append and save
+curr_wx <- get_curr_forecast_wx()
+hist_wx <- suppressMessages(full_join(hist_wx, curr_wx))
+save("hist_wx", file = hist_wx_file_name)
 
 # create 'tomorrow' data to guess on
 today <- Sys.Date()
@@ -30,6 +35,15 @@ hourly_day$fhour = as.factor(hourly_day$hour)
 hourly_day$fyear = as.factor(hourly_day$year)
 hourly_day$fmonth = as.factor(hourly_day$month)
 
+today_dat <- data.frame(year = format(today, '%Y'),
+                           month = format(today, '%m'),
+                           day = format(today, '%A'),  # Full weekday name
+                           hour = seq(0, 23, by = 1),
+                           date = today)
+today_dat$fhour = as.factor(today_dat$hour)
+today_dat$fyear = as.factor(today_dat$year)
+today_dat$fmonth = as.factor(today_dat$month)
+
 tomorrow_dat <- data.frame(year = format(tomorrow, '%Y'),
                            month = format(tomorrow, '%m'),
                            day = format(tomorrow, '%A'),  # Full weekday name
@@ -39,35 +53,112 @@ tomorrow_dat$fhour = as.factor(tomorrow_dat$hour)
 tomorrow_dat$fyear = as.factor(tomorrow_dat$year)
 tomorrow_dat$fmonth = as.factor(tomorrow_dat$month)
 
-# Load fitted models
-load('Regression_models.RData')
-load('Random_forest_models.RData')
+curr_dat <- full_join(today_dat, tomorrow_dat,
+                      by = c('year', 'date', 'month', 'day', 'hour',
+                             'fhour', 'fyear', 'fmonth'))
+
+# Join with weather. 
+hourly_day_wx <- left_join(hourly_day,
+                           hist_wx,
+                           by = c('year', 'date', 'month', 'day', 'hour'))
+
+curr_dat_wx <- left_join(curr_dat,
+                         curr_wx,
+                         by = c('year', 'date', 'month', 'day', 'hour'))
+
+# RF requires factors, not character vectors
+hourly_day <- hourly_day %>%
+  ungroup() %>%
+  mutate(day = as.factor(day)) 
+
+curr_dat <- curr_dat %>%
+  ungroup() %>%
+  mutate(day = as.factor(day)) 
+
+hourly_day_wx <- hourly_day_wx %>%
+  ungroup() %>%
+  mutate(day = as.factor(day),
+         precipType = as.factor(precipType)) 
+
+curr_dat_wx <- curr_dat_wx %>%
+  ungroup %>%
+  mutate(day = as.factor(day),
+         precipType = as.factor(precipType))
+# Now creating a 'rainy' variable for precipProbability over 0.15. Otherwise, regression models having some matrix invertability problems -- not enough variation at some factor levels. Should write a tryCatch to first try probability, if errors then move to rainy factor.
+hourly_day_wx$rainy <- hourly_day_wx$precipProbability >= 0.15
+curr_dat_wx$rainy <- curr_dat_wx$precipProbability >= 0.15
+
+load(paste0('Regression_models_', socrata_ID,'.RData'))
+load(paste0('Random_forest_models_', socrata_ID,'.RData'))
 
 # Standard regression approaches ----
 # zero-inflated negative binomial
 if(REFIT){
-  hourly_mod6 <- zeroinfl(Total ~ day + fhour + fyear + fmonth, 
-                          data = hourly_day,
-                          dist = 'negbin')
-  hourly_mod6_Westbound <- zeroinfl(Westbound ~ day + fhour + fyear + fmonth, 
-                          data = hourly_day,
-                          dist = 'negbin')
-  hourly_mod6_Eastbound <- zeroinfl(Eastbound ~ day + fhour + fyear + fmonth, 
+  hourly_mod_Total <- zeroinfl(Total ~ day + fhour + fmonth, 
                           data = hourly_day,
                           dist = 'negbin')
   
-  save(list = c('hourly_mod6', 'hourly_mod6_Westbound', 'hourly_mod6_Eastbound'),
-       file = 'Regression_models.RData')
+  cat('hourly_mod_Total complete \n')
+  hourly_mod_wx_Total <- zeroinfl(Total ~ day + fhour + fmonth +
+                                  precipProbability + temperature, 
+                          data = hourly_day_wx,
+                          dist = 'negbin')
+  
+  cat('hourly_mod_wx_Total complete \n')
+  hourly_mod_Westbound <- zeroinfl(Westbound ~ day + fhour + fmonth, 
+                          data = hourly_day,
+                          dist = 'negbin')
+  
+  cat('hourly_mod_Westbound complete')
+  hourly_mod_wx_Westbound <- zeroinfl(Westbound ~ day + fhour + fmonth +
+                                      rainy + temperature, 
+                                      data = hourly_day_wx,
+                                      dist = 'negbin')
+  
+  cat('hourly_mod_wx_Westbound complete \n')
+  hourly_mod_Eastbound <- zeroinfl(Eastbound ~ day + fhour + fmonth, 
+                          data = hourly_day,
+                          dist = 'negbin')
+  
+  cat('hourly_mod_Eastbound complete \n')
+  
+  hourly_mod_wx_Eastbound <- zeroinfl(Eastbound ~ day + fhour + fmonth +
+                                      rainy + temperature, 
+                                      data = hourly_day_wx,
+                                      dist = 'negbin')
+  
+  cat('hourly_mod_wx_Eastbound complete \n')
+  
+  save(list = c('hourly_mod_Total', 'hourly_mod_Westbound', 'hourly_mod_Eastbound',
+                'hourly_mod_wx_Total', 'hourly_mod_wx_Westbound', 'hourly_mod_wx_Eastbound'),
+       file = paste0('Regression_models_', socrata_ID,'.RData'))
 }
 
-# Guess tomorrow
-tomorrow_dat$Total     <- predict(hourly_mod6, tomorrow_dat, type = "response")
-tomorrow_dat$Eastbound <- predict(hourly_mod6_Eastbound, tomorrow_dat, type = "response")
-tomorrow_dat$Westbound <- predict(hourly_mod6_Westbound, tomorrow_dat, type = "response")
+# Guess today and tomorrow, with and without wx. 
+# TODO: Clean this up with some functions to make it more flexible
+curr_dat$Total     <- predict(hourly_mod_Total, curr_dat, type = "response")
+curr_dat$Eastbound <- predict(hourly_mod_Eastbound, curr_dat, type = "response")
+curr_dat$Westbound <- predict(hourly_mod_Westbound, curr_dat, type = "response")
 
-regression_guess_Total     <- sum(tomorrow_dat$Total)  
-regression_guess_Westbound <- sum(tomorrow_dat$Westbound)  
-regression_guess_Eastbound <- sum(tomorrow_dat$Eastbound)  
+regression_guess_Total     <- as.numeric(curr_dat %>% filter(date == tomorrow) %>% summarize(sum(Total)))
+regression_guess_Westbound <- as.numeric(curr_dat %>% filter(date == tomorrow) %>% summarize(sum(Westbound)))
+regression_guess_Eastbound <- as.numeric(curr_dat %>% filter(date == tomorrow) %>% summarize(sum(Eastbound)))
+
+regression_guess_Total_today     <- as.numeric(curr_dat %>% filter(date == today) %>% summarize(sum(Total)))
+regression_guess_Westbound_today <- as.numeric(curr_dat %>% filter(date == today) %>% summarize(sum(Westbound)))
+regression_guess_Eastbound_today <- as.numeric(curr_dat %>% filter(date == today) %>% summarize(sum(Eastbound)))
+
+curr_dat$Total_wx     <- predict(hourly_mod_wx_Total, curr_dat_wx, type = "response")
+curr_dat$Eastbound_wx <- predict(hourly_mod_wx_Eastbound, curr_dat_wx, type = "response")
+curr_dat$Westbound_wx <- predict(hourly_mod_wx_Westbound, curr_dat_wx, type = "response")
+
+regression_guess_wx_Total     <- as.numeric(curr_dat %>% filter(date == tomorrow) %>% summarize(sum(Total_wx)))
+regression_guess_wx_Westbound <- as.numeric(curr_dat %>% filter(date == tomorrow) %>% summarize(sum(Westbound_wx)))
+regression_guess_wx_Eastbound <- as.numeric(curr_dat %>% filter(date == tomorrow) %>% summarize(sum(Eastbound_wx)))
+
+regression_guess_wx_Total_today     <- as.numeric(curr_dat %>% filter(date == today) %>% summarize(sum(Total_wx)))
+regression_guess_wx_Westbound_today <- as.numeric(curr_dat %>% filter(date == today) %>% summarize(sum(Westbound_wx)))
+regression_guess_wx_Eastbound_today <- as.numeric(curr_dat %>% filter(date == today) %>% summarize(sum(Eastbound_wx)))
 
 # Time series approaches ----
 dayts <- daily$Total
@@ -121,10 +212,6 @@ ts_guess_Eastbound <- as.numeric(ts_guess_Eastbound$mean)
 if(REFIT){
   library(doParallel)
   
-  train.dat = hourly_day
-  response.var = c('Total', 'Westbound', 'Eastbound') 
-  class(train.dat) = 'data.frame' # drop grouped_df, tbl
-  
   avail.cores = parallel::detectCores()
   if(avail.cores > 8) avail.cores = 10 # Limit usage below max if on r4.4xlarge AWS instance (probably won't ever go that big)
   rf.inputs = list(ntree.use = avail.cores * 50, 
@@ -133,6 +220,10 @@ if(REFIT){
                    maxnodes = 1000,
                    nodesize = 100)
   test.split = .30
+  
+  train.dat = hourly_day
+  response.var = c('Total', 'Westbound', 'Eastbound') 
+  class(train.dat) = 'data.frame' # drop grouped_df, tbl
   
   fitvars <- c('day', 'fhour', 'fyear', 'fmonth')
   
@@ -177,32 +268,106 @@ if(REFIT){
   timediff = Sys.time() - starttime
   cat(round(timediff,2), attr(timediff, "unit"), "to fit RF models \n")
   
-  rfmods = ls()[grep('rf_mod_', ls())]
+  rfmods  = ls()[grep('rf_mod_', ls())]
   rfpreds = ls()[grep('rf_pred_', ls())]
-  rfrmses= ls()[grep('rf_rmse_', ls())]
+  rfrmses = ls()[grep('rf_rmse_', ls())]
   
-  save(list = c('fitvars', 'rundat', rfmods, rfpreds, rfrmses),
-       file = 'Random_forest_models.RData')
+  # Add weather to RF ----
+  train.dat = hourly_day_wx
+  response.var = c('Total', 'Westbound', 'Eastbound') 
+  class(train.dat) = 'data.frame' # drop grouped_df, tbl
+  
+  fitvars_wx <- c('day', 'fhour', 'fyear', 'fmonth', 'precipIntensity', 'precipProbability', 'temperature', 'humidity', 'windSpeed', 'windGust', 'cloudCover', 'visibility', 'precipType')
+  
+  # Remove any rows with NA in predictors
+  cc <- complete.cases(train.dat[, fitvars_wx])
+  train.dat <- train.dat[cc, c(response.var, fitvars_wx)]
+  
+  trainrows <- sort(sample(1:nrow(train.dat), size = nrow(train.dat)*(1-test.split), replace = F))
+  testrows <- (1:nrow(train.dat))[!1:nrow(train.dat) %in% trainrows]
+  rundat = train.dat[trainrows,]
+  test.dat.use = train.dat[testrows,]
+  
+  # Start RF in parallel
+  starttime = Sys.time()
+  
+  # make a cluster of all available cores
+  cl <- makeCluster(rf.inputs$avail.cores, useXDR = F) 
+  registerDoParallel(cl)
+  
+  # Loop over each response variable
+  for(i in 1:length(response.var)){
+    rf.out <- foreach(ntree = rep(rf.inputs$ntree.use/rf.inputs$avail.cores, rf.inputs$avail.cores),
+                      .combine = randomForest::combine, .multicombine=T, .packages = 'randomForest') %dopar% 
+      randomForest(x = rundat[,fitvars_wx], y = rundat[,response.var[i]], 
+                   ntree = ntree, mtry = rf.inputs$mtry, 
+                   maxnodes = rf.inputs$maxnodes, nodesize = rf.inputs$nodesize,
+                   keep.forest = T)
+    
+    # Some diagnostics
+    rf.pred <- predict(rf.out, test.dat.use[fitvars_wx], type = 'response')
+    
+    ( rmse = sqrt( 
+      mean(
+        c( as.numeric(as.character(test.dat.use[,response.var[i]])) - as.numeric(rf.pred) ) ^2 ) ) )
+    
+    assign(paste0('rf_mod_wx_', response.var[i]), rf.out)
+    assign(paste0('rf_pred_wx_', response.var[i]), rf.pred)
+    assign(paste0('rf_rmse_wx_', response.var[i]), rmse)
+  }
+  stopCluster(cl); rm(cl); gc(verbose = F) # Stop the cluster immediately after finished the RF
+  
+  timediff = Sys.time() - starttime
+  cat(round(timediff,2), attr(timediff, "unit"), "to fit RF models \n")
+  
+  rfmods  = ls()[grep('rf_mod_', ls())]
+  rfpreds = ls()[grep('rf_pred_wx_', ls())]
+  rfrmses = ls()[grep('rf_rmse_wx_', ls())]
+  
+  save(list = c('fitvars', 'fitvars_wx', 'rundat', rfmods, rfpreds, rfrmses),
+       file = paste0('Random_forest_models_', socrata_ID,'.RData'))
 } 
 # Make a guess with the RF model. Tomorrow_dat factors have to have the same levels as in the rundat, so need to add the empty levels
 
-levadd <- function(factor_var){
-  tlev <- levels(tomorrow_dat[,factor_var])
-  addlev <- levels(rundat[,factor_var])[!levels(rundat[,factor_var]) %in% tlev]
-  levels(tomorrow_dat[,factor_var]) = c(levels(tomorrow_dat[,factor_var]), addlev)
-  tomorrow_dat[,factor_var]
+levadd <- function(factor_var, curr = curr_dat, run = rundat){
+  tlev <- levels(curr[,factor_var])
+  addlev <- levels(run[,factor_var])[!levels(run[,factor_var]) %in% tlev]
+  levels(curr[,factor_var]) = c(levels(curr[,factor_var]), addlev)
+  curr[,factor_var]
 }
 
 for(i in fitvars) { 
-  tomorrow_dat[,i] = levadd(factor_var = i) 
-  }
+  curr_dat[,i] = levadd(factor_var = i) 
+}
 
-tomorrow_dat$Total_RF     <- predict(rf_mod_Total, tomorrow_dat[,fitvars])
-tomorrow_dat$Westbound_RF <- predict(rf_mod_Westbound, tomorrow_dat[,fitvars])
-tomorrow_dat$Eastbound_RF <- predict(rf_mod_Eastbound, tomorrow_dat[,fitvars])
+for(i in fitvars_wx) { 
+  curr_dat_wx[,i] = levadd(factor_var = i, curr_dat_wx, rundat) 
+}
 
-rf_guess_Total     <- sum(tomorrow_dat$Total_RF)
-rf_guess_Westbound <- sum(tomorrow_dat$Westbound_RF)
-rf_guess_Eastbound <- sum(tomorrow_dat$Eastbound_RF)
+curr_dat$Total_RF     <- predict(rf_mod_Total, curr_dat[,fitvars])
+curr_dat$Westbound_RF <- predict(rf_mod_Westbound, curr_dat[,fitvars])
+curr_dat$Eastbound_RF <- predict(rf_mod_Eastbound, curr_dat[,fitvars])
+
+rf_guess_Total     <- as.numeric(curr_dat %>% filter(date == tomorrow) %>% summarize(sum(Total_RF)))
+rf_guess_Westbound <- as.numeric(curr_dat %>% filter(date == tomorrow) %>% summarize(sum(Westbound_RF)))
+rf_guess_Eastbound <- as.numeric(curr_dat %>% filter(date == tomorrow) %>% summarize(sum(Eastbound_RF)))
+
+rf_guess_Total_today     <- as.numeric(curr_dat %>% filter(date == today) %>% summarize(sum(Total_RF)))
+rf_guess_Westbound_today <- as.numeric(curr_dat %>% filter(date == today) %>% summarize(sum(Westbound_RF)))
+rf_guess_Eastbound_today <- as.numeric(curr_dat %>% filter(date == today) %>% summarize(sum(Eastbound_RF)))
+
+# with wx
+curr_dat$Total_wx_RF     <- predict(rf_mod_wx_Total, curr_dat_wx[,fitvars_wx])
+curr_dat$Westbound_wx_RF <- predict(rf_mod_wx_Westbound, curr_dat_wx[,fitvars_wx])
+curr_dat$Eastbound_wx_RF <- predict(rf_mod_wx_Eastbound, curr_dat_wx[,fitvars_wx])
+
+rf_guess_wx_Total     <- as.numeric(curr_dat %>% filter(date == tomorrow) %>% summarize(sum(Total_wx_RF)))
+rf_guess_wx_Westbound <- as.numeric(curr_dat %>% filter(date == tomorrow) %>% summarize(sum(Westbound_wx_RF)))
+rf_guess_wx_Eastbound <- as.numeric(curr_dat %>% filter(date == tomorrow) %>% summarize(sum(Eastbound_wx_RF)))
+
+rf_guess_wx_Total_today     <- as.numeric(curr_dat %>% filter(date == today) %>% summarize(sum(Total_wx_RF)))
+rf_guess_wx_Westbound_today <- as.numeric(curr_dat %>% filter(date == today) %>% summarize(sum(Westbound_wx_RF)))
+rf_guess_wx_Eastbound_today <- as.numeric(curr_dat %>% filter(date == today) %>% summarize(sum(Eastbound_wx_RF)))
+
 
 # next: store these guesses, display on dashboard

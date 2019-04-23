@@ -29,7 +29,11 @@ ui <- fluidPage(
     ),
   mainPanel(
     plotlyOutput('plot1'),
-    h4(textOutput('latest_text')),
+    h4(textOutput('latest_text')), br(),
+    h4(textOutput('guess_header_text_today')),
+    h5(textOutput('reg_guess_text_today')),
+    h5(textOutput('ts_guess_text_today')),
+    h5(textOutput('rf_guess_text_today')), br(),
     h4(textOutput('guess_header_text')),
     h5(textOutput('reg_guess_text')),
     h5(textOutput('ts_guess_text')),
@@ -87,7 +91,36 @@ server <- function(input, output, session) {
           "was",
           format(as.numeric(latest_day[,input$ycol]), big.mark = ",")
           )})
+ 
+  # Today guesses ----
+  output$guess_header_text_today <- renderText({
+    paste0("Here are the best guesses of " , input$ycol,
+           " for today, ", 
+           curr_dat$day[1], ", ",
+           today, ": ")
+  })
   
+  output$reg_guess_text_today <- renderText({
+    paste("Regression model: \t\t\t\t",
+          format(round(get(paste0('regression_guess_', input$ycol, '_today')), 0), big.mark = ","),
+          "with weather variables: \t",
+          format(round(get(paste0('regression_guess_wx_', input$ycol, '_today')), 0), big.mark = ",")
+          
+    )})
+  
+  output$ts_guess_text_today <- renderText({
+    paste("Time series model: \t\t\t\t", 
+          format(round(get(paste0('ts_guess_', input$ycol)), 0), big.mark = ",")
+    )})
+  
+  output$rf_guess_text_today <- renderText({
+    paste("Machine learning model: \t\t\t\t", 
+          format(round(get(paste0('rf_guess_', input$ycol, '_today')), 0), big.mark = ","),
+          "with weather variables: \t",
+          format(round(get(paste0('rf_guess_wx_', input$ycol, '_today')), 0), big.mark = ",")
+    )})
+  
+  # Tomorrow guesses ----
   output$guess_header_text <- renderText({
     paste0("Here are the best guesses of " , input$ycol,
           " for tomorrow, ", 
@@ -97,7 +130,10 @@ server <- function(input, output, session) {
   
   output$reg_guess_text <- renderText({
     paste("Regression model: \t\t\t\t",
-          format(round(get(paste0('regression_guess_', input$ycol)), 0), big.mark = ",")
+          format(round(get(paste0('regression_guess_', input$ycol)), 0), big.mark = ","),
+          "with weather variables: \t",
+          format(round(get(paste0('regression_guess_wx_', input$ycol)), 0), big.mark = ",")
+                
     )})
   
   output$ts_guess_text <- renderText({
@@ -107,7 +143,9 @@ server <- function(input, output, session) {
   
   output$rf_guess_text <- renderText({
     paste("Machine learning model: \t\t\t\t", 
-          format(round(get(paste0('rf_guess_', input$ycol)), 0), big.mark = ",")
+          format(round(get(paste0('rf_guess_', input$ycol)), 0), big.mark = ","),
+          "with weather variables: \t",
+          format(round(get(paste0('rf_guess_wx_', input$ycol)), 0), big.mark = ",")
     )})
   
   session$allowReconnect(TRUE) # change to TRUE for server
