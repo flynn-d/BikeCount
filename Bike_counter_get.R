@@ -115,6 +115,11 @@ daily$day_of_week <- as.factor(as.character(daily$day_of_week))
 levels(daily$day_of_week) <- c('Sunday', 'Monday', 'Tuesday', 'Wednesday',
                                'Thursday', 'Friday', 'Saturday')
 
+#calculate monthly totals
+monthly <- count %>%
+  mutate(month = format(datetime, '%m'))
+  group_by(year, month_of_year = as.factor(month))
+
 metrictimediff <- Sys.time() - metrictime
 # cat('Fetch took:', fetchtimediff, attr(fetchtimediff, 'units'), '\n') # Use these for profiling run time
 # cat('Metrics took:', metrictimediff, attr(metrictimediff, 'units'), '\n')

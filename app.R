@@ -1,6 +1,7 @@
 rm(list=ls())
 library(ggplot2)
 library(plotly)
+library(shiny)
 # source('get_dependencies.R') # Run this once on a new instance, may be time-consuming 
 source('Helper_fx.R')
 source('Bike_counter_get.R')
@@ -17,7 +18,8 @@ ui <- fluidPage(
     radioButtons("view", "View data by:",
                  c("Date" = "daily",
                    "Day of Week" = "d_o_w",
-                   "Hour of Day" = "hourly")),
+                   "Hour of Day" = "hourly",
+                   "Month" = "monthly")),
     
     selectInput('ycol', 
                 'Y Variable', 
@@ -80,6 +82,18 @@ server <- function(input, output, session) {
           theme_bw()
         
       }
+    
+      # Monthly view
+      if(input$view == 'monthly'){
+        gp <- ggplot(monthly,
+                     aes_string(x = 'monthly',
+                                y = as.name(input$ycol),
+                                color = 'month')) +
+          geom_point(aes(text = date)) +
+          xlab('Month') +
+          theme_bw()
+      }
+    
       print(ggplotly(gp))
       }) # end renderPlotly
   
