@@ -17,45 +17,39 @@ if(file.exists(hist_wx_file_name)){
   load(hist_wx_file_name) 
   } else {
   hist_wx <- get_historical_wx()
+  # Only keep unique values (should only have unique rows)
+  hist_wx <- hist_wx[!duplicated(hist_wx %>% select(time, datetime)),]
   save("hist_wx", file = hist_wx_file_name)
   }
 
 # Get forecasted weather, append and save
 curr_wx <- get_curr_forecast_wx()
-hist_wx <- suppressMessages(full_join(hist_wx, curr_wx))
-save("hist_wx", file = hist_wx_file_name)
 
-# create 'tomorrow' data to guess on
+# Possible that some rows of curr_wx are present in hist_wx if get_curr_forecast_wx was run already for this day; only append new rows to hist_wx
+curr_wx_add <- curr_wx[!curr_wx$time %in% hist_wx$time,] 
+hist_wx <- suppressMessages(full_join(hist_wx, curr_wx_add))
+save("hist_wx", file = hist_wx_file_name) 
+  
+# create 'today' and 'tomorrow' data to guess on
 today <- Sys.Date()
 tomorrow <- today + 1
-
-# Create factors for hour, year, and month, instead of numeric
-hourly_day$day = as.factor(hourly_day$day)
-hourly_day$fhour = as.factor(hourly_day$hour)
-hourly_day$fyear = as.factor(hourly_day$year)
-hourly_day$fmonth = as.factor(hourly_day$month)
 
 today_dat <- data.frame(year = format(today, '%Y'),
                            month = format(today, '%m'),
                            day = format(today, '%A'),  # Full weekday name
                            hour = seq(0, 23, by = 1),
-                           date = today)
-today_dat$fhour = as.factor(today_dat$hour)
-today_dat$fyear = as.factor(today_dat$year)
-today_dat$fmonth = as.factor(today_dat$month)
+                           date = today,
+                        stringsAsFactors = F)
 
 tomorrow_dat <- data.frame(year = format(tomorrow, '%Y'),
                            month = format(tomorrow, '%m'),
                            day = format(tomorrow, '%A'),  # Full weekday name
                            hour = seq(0, 23, by = 1),
-                           date = tomorrow)
-tomorrow_dat$fhour = as.factor(tomorrow_dat$hour)
-tomorrow_dat$fyear = as.factor(tomorrow_dat$year)
-tomorrow_dat$fmonth = as.factor(tomorrow_dat$month)
+                           date = tomorrow,
+                           stringsAsFactors = F)
 
 curr_dat <- full_join(today_dat, tomorrow_dat,
-                      by = c('year', 'date', 'month', 'day', 'hour',
-                             'fhour', 'fyear', 'fmonth'))
+                      by = c('year', 'date', 'month', 'day', 'hour'))
 
 # Join with weather. 
 hourly_day_wx <- left_join(hourly_day,
@@ -69,21 +63,34 @@ curr_dat_wx <- left_join(curr_dat,
 # RF requires factors, not character vectors
 hourly_day <- hourly_day %>%
   ungroup() %>%
-  mutate(day = as.factor(day)) 
+  mutate(day = as.factor(day),
+         fhour = as.factor(hour),
+         fyear = as.factor(year),
+         fmonth = as.factor(month))
 
 curr_dat <- curr_dat %>%
   ungroup() %>%
-  mutate(day = as.factor(day)) 
+  mutate(day = as.factor(day),
+         fhour = as.factor(hour),
+         fyear = as.factor(year),
+         fmonth = as.factor(month))
 
 hourly_day_wx <- hourly_day_wx %>%
   ungroup() %>%
   mutate(day = as.factor(day),
-         precipType = as.factor(precipType)) 
+         fhour = as.factor(hour),
+         fyear = as.factor(year),
+         fmonth = as.factor(month),
+         precipType = as.factor(precipType))
 
 curr_dat_wx <- curr_dat_wx %>%
   ungroup %>%
   mutate(day = as.factor(day),
+         fhour = as.factor(hour),
+         fyear = as.factor(year),
+         fmonth = as.factor(month),
          precipType = as.factor(precipType))
+
 # Now creating a 'rainy' variable for precipProbability over 0.15. Otherwise, regression models having some matrix invertability problems -- not enough variation at some factor levels. Should write a tryCatch to first try probability, if errors then move to rainy factor.
 hourly_day_wx$rainy <- hourly_day_wx$precipProbability >= 0.15
 curr_dat_wx$rainy <- curr_dat_wx$precipProbability >= 0.15
@@ -173,8 +180,10 @@ dayts <- ts(dayts,
 
 # Holt-Winter exponential smoothing
 dayts_forecasts <- HoltWinters(dayts, beta=NULL, gamma=NULL)
-ts_guess_Total <- forecast(dayts_forecasts, h = 1) # need to change to 2 for today and tomorrow
-ts_guess_Total <- as.numeric(ts_guess_Total$mean)
+ts_guess_Total <- forecast(dayts_forecasts, h = 2) # need to change to 2 for today and tomorrow
+ts_guess_Total_today <- as.numeric(ts_guess_Total$mean[1])
+ts_guess_Total_tomorrow <- as.numeric(ts_guess_Total$mean[2])
+
 
 # Repeat, for Westbound
 dayts <- daily$Westbound
@@ -188,8 +197,9 @@ dayts <- ts(dayts,
             frequency = 365)
 
 dayts_forecasts    <- HoltWinters(dayts, beta=NULL, gamma=NULL)
-ts_guess_Westbound <- forecast(dayts_forecasts, h = 1)
-ts_guess_Westbound <- as.numeric(ts_guess_Westbound$mean)
+ts_guess_Westbound <- forecast(dayts_forecasts, h = 2)
+ts_guess_Westbound_today <- as.numeric(ts_guess_Westbound$mean[1])
+ts_guess_Westbound_tomorrow <- as.numeric(ts_guess_Westbound$mean[2])
 
 # Repeat, for Eastbound
 dayts <- daily$Eastbound
@@ -203,8 +213,9 @@ dayts <- ts(dayts,
             frequency = 365)
 
 dayts_forecasts    <- HoltWinters(dayts, beta=NULL, gamma=NULL)
-ts_guess_Eastbound <- forecast(dayts_forecasts, h = 1)
-ts_guess_Eastbound <- as.numeric(ts_guess_Eastbound$mean)
+ts_guess_Eastbound <- forecast(dayts_forecasts, h = 2)
+ts_guess_Eastbound_today <- as.numeric(ts_guess_Eastbound$mean[1])
+ts_guess_Eastbound_tomorrow <- as.numeric(ts_guess_Eastbound$mean[2])
 
 # ML approaches ----
 
@@ -240,7 +251,7 @@ if(REFIT){
   starttime = Sys.time()
   
   # make a cluster of all available cores
-  cl <- makeCluster(rf.inputs$avail.cores, useXDR = F) 
+  cl <- makeCluster(rf.inputs$avail.cores) 
   registerDoParallel(cl)
   
   # Loop over each response variable
@@ -266,7 +277,7 @@ if(REFIT){
   stopCluster(cl); rm(cl); gc(verbose = F) # Stop the cluster immediately after finished the RF
   
   timediff = Sys.time() - starttime
-  cat(round(timediff,2), attr(timediff, "unit"), "to fit RF models \n")
+  cat(round(timediff,2), attr(timediff, "unit"), "to fit RF models without wx \n")
   
   rfmods  = ls()[grep('rf_mod_', ls())]
   rfpreds = ls()[grep('rf_pred_', ls())]
@@ -277,7 +288,7 @@ if(REFIT){
   response.var = c('Total', 'Westbound', 'Eastbound') 
   class(train.dat) = 'data.frame' # drop grouped_df, tbl
   
-  fitvars_wx <- c('day', 'fhour', 'fyear', 'fmonth', 'precipIntensity', 'precipProbability', 'temperature', 'humidity', 'windSpeed', 'windGust', 'cloudCover', 'visibility', 'precipType')
+  fitvars_wx <- c('day', 'fhour', 'fyear', 'fmonth', 'precipIntensity', 'precipProbability', 'temperature', 'windSpeed', 'visibility', 'precipType')
   
   # Remove any rows with NA in predictors
   cc <- complete.cases(train.dat[, fitvars_wx])
@@ -318,7 +329,7 @@ if(REFIT){
   stopCluster(cl); rm(cl); gc(verbose = F) # Stop the cluster immediately after finished the RF
   
   timediff = Sys.time() - starttime
-  cat(round(timediff,2), attr(timediff, "unit"), "to fit RF models \n")
+  cat(round(timediff,2), attr(timediff, "unit"), "to fit RF models with wx \n")
   
   rfmods  = ls()[grep('rf_mod_', ls())]
   rfpreds = ls()[grep('rf_pred_wx_', ls())]
@@ -337,7 +348,7 @@ levadd <- function(factor_var, curr = curr_dat, run = rundat){
 }
 
 for(i in fitvars) { 
-  curr_dat[,i] = levadd(factor_var = i) 
+  curr_dat[,i] = levadd(factor_var = i, curr_dat, rundat) 
 }
 
 for(i in fitvars_wx) { 
@@ -368,6 +379,5 @@ rf_guess_wx_Eastbound <- as.numeric(curr_dat %>% filter(date == tomorrow) %>% su
 rf_guess_wx_Total_today     <- as.numeric(curr_dat %>% filter(date == today) %>% summarize(sum(Total_wx_RF)))
 rf_guess_wx_Westbound_today <- as.numeric(curr_dat %>% filter(date == today) %>% summarize(sum(Westbound_wx_RF)))
 rf_guess_wx_Eastbound_today <- as.numeric(curr_dat %>% filter(date == today) %>% summarize(sum(Eastbound_wx_RF)))
-
 
 # next: store these guesses, display on dashboard
