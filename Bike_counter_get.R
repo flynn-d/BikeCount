@@ -117,8 +117,11 @@ levels(daily$day_of_week) <- c('Sunday', 'Monday', 'Tuesday', 'Wednesday',
 
 #calculate monthly totals
 monthly <- count %>%
-  mutate(month = format(datetime, '%m'))
-  group_by(year, month_of_year = as.factor(month))
+  mutate(month = format(datetime, '%m')) %>%
+  group_by(year, month_of_year = as.factor(month)) %>%
+  dplyr::summarise(Total = sum(Total),
+                   Westbound = sum(Westbound),
+                   Eastbound = sum(Eastbound))
 
 metrictimediff <- Sys.time() - metrictime
 # cat('Fetch took:', fetchtimediff, attr(fetchtimediff, 'units'), '\n') # Use these for profiling run time
