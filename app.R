@@ -110,7 +110,7 @@ server <- function(input, output, session) {
   
   output$ts_guess_text_today <- renderText({
     paste("Time series model: \t\t\t\t", 
-          format(round(get(paste0('ts_guess_', input$ycol)), 0), big.mark = ",")
+          format(round(get(paste0('ts_guess_', input$ycol, '_today')), 0), big.mark = ",")
     )})
   
   output$rf_guess_text_today <- renderText({
@@ -138,7 +138,7 @@ server <- function(input, output, session) {
   
   output$ts_guess_text <- renderText({
     paste("Time series model: \t\t\t\t", 
-          format(round(get(paste0('ts_guess_', input$ycol)), 0), big.mark = ",")
+          format(round(get(paste0('ts_guess_', input$ycol, '_tomorrow')), 0), big.mark = ",")
     )})
   
   output$rf_guess_text <- renderText({
