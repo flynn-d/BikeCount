@@ -17,10 +17,10 @@ parse_socrata_ID <- regexpr(pattern, api_get, perl = T)
 socrata_ID <- substring(api_get, first = parse_socrata_ID, last = parse_socrata_ID + attr(parse_socrata_ID, 'match.length') - 1)
 
 # Load historical count once. Takes 7s initially to download, vs. 0.1s to load from working directory
-hist_count_name = paste0("BikeCountHist_", socrata_ID, ".RData")
+hist_count_name = file.path('Data', paste0("BikeCountHist_", socrata_ID, ".RData"))
 
 # We will increment the historical data daily
-if(length(grep(hist_count_name, dir()))==0){
+if(!file.exists(hist_count_name)){
   hist_count <- read.socrata(api_get)
   hist_count <- hist_count[order(hist_count$datetime),]
   original_rownum <- nrow(hist_count)

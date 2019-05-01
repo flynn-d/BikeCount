@@ -11,7 +11,7 @@ library(forecast)
 REFIT = F # Set to T to re-fit the regression and ML models
 
 # Load historical weather, then forecast weather
-hist_wx_file_name = paste0('Hist_WX_', socrata_ID, '.RData')
+hist_wx_file_name = file.path('Data', paste0('Hist_WX_', socrata_ID, '.RData'))
 
 if(file.exists(hist_wx_file_name)){
   load(hist_wx_file_name) 
@@ -95,8 +95,8 @@ curr_dat_wx <- curr_dat_wx %>%
 hourly_day_wx$rainy <- hourly_day_wx$precipProbability >= 0.15
 curr_dat_wx$rainy <- curr_dat_wx$precipProbability >= 0.15
 
-load(paste0('Regression_models_', socrata_ID,'.RData'))
-load(paste0('Random_forest_models_', socrata_ID,'.RData'))
+load(file.path('Models', paste0('Regression_models_', socrata_ID,'.RData')))
+load(file.path('Models', paste0('Random_forest_models_', socrata_ID,'.RData')))
 
 # Standard regression approaches ----
 # zero-inflated negative binomial
@@ -138,7 +138,7 @@ if(REFIT){
   
   save(list = c('hourly_mod_Total', 'hourly_mod_Westbound', 'hourly_mod_Eastbound',
                 'hourly_mod_wx_Total', 'hourly_mod_wx_Westbound', 'hourly_mod_wx_Eastbound'),
-       file = paste0('Regression_models_', socrata_ID,'.RData'))
+       file = file.path('Models', paste0('Regression_models_', socrata_ID,'.RData')))
 }
 
 # Guess today and tomorrow, with and without wx. 
@@ -336,7 +336,7 @@ if(REFIT){
   rfrmses = ls()[grep('rf_rmse_wx_', ls())]
   
   save(list = c('fitvars', 'fitvars_wx', 'rundat', rfmods, rfpreds, rfrmses),
-       file = paste0('Random_forest_models_', socrata_ID,'.RData'))
+       file = file.path('Models', paste0('Random_forest_models_', socrata_ID,'.RData')))
 } 
 # Make a guess with the RF model. Tomorrow_dat factors have to have the same levels as in the rundat, so need to add the empty levels
 
