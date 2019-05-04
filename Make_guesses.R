@@ -23,7 +23,7 @@ if(file.exists(hist_wx_file_name)){
   }
 
 # Get forecasted weather, append and save
-curr_wx <- get_curr_forecast_wx()
+curr_wx <- get_curr_forecast_wx() 
 
 # Possible that some rows of curr_wx are present in hist_wx if get_curr_forecast_wx was run already for this day; only append new rows to hist_wx
 curr_wx_add <- curr_wx[!curr_wx$time %in% hist_wx$time,] 
@@ -227,9 +227,7 @@ if(REFIT){
   if(avail.cores > 8) avail.cores = 10 # Limit usage below max if on r4.4xlarge AWS instance (probably won't ever go that big)
   rf.inputs = list(ntree.use = avail.cores * 50, 
                    avail.cores = avail.cores, 
-                   mtry = 10,
-                   maxnodes = 1000,
-                   nodesize = 100)
+                   mtry = 3)
   test.split = .30
   
   train.dat = hourly_day
@@ -264,7 +262,7 @@ if(REFIT){
                  keep.forest = T)
   
   # Some diagnostics
-  rf.pred <- predict(rf.out, test.dat.use[fitvars], type = 'response')
+  rf.pred <- predict(rf.out, test.dat.use[,fitvars], type = 'response')
   
   ( rmse = sqrt( 
               mean(
@@ -303,7 +301,7 @@ if(REFIT){
   starttime = Sys.time()
   
   # make a cluster of all available cores
-  cl <- makeCluster(rf.inputs$avail.cores, useXDR = F) 
+  cl <- makeCluster(rf.inputs$avail.cores) 
   registerDoParallel(cl)
   
   # Loop over each response variable
