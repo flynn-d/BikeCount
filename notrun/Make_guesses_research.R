@@ -5,6 +5,7 @@
 
 # Setup ----
 source('Bike_counter_get.R')
+source('Helper_fx.R')
 library(tidyverse)
 library(MASS) # for negative binomial regression. Masks select from dplyr
 library(pscl) # for zero-inflated models
@@ -52,7 +53,10 @@ tomorrow_dat <- data.frame(year = format(tomorrow, '%Y'),
                            day = format(tomorrow, '%A'),  # Full weekday name
                            hour = seq(0, 23, by = 1),
                            date = tomorrow,
-                           stringsAsFactors = F)
+                           stringsAsFactors = F) %>%
+  mutate(fhour = as.factor(hour),
+         fmonth = as.factor(month),
+         fyear = as.factor(year))
 
 curr_dat <- full_join(today_dat, tomorrow_dat,
                       by = c('year', 'date', 'month', 'day', 'hour'))
@@ -109,15 +113,15 @@ curr_dat_wx$rainy <- curr_dat_wx$precipProbability >= 0.15
 # negative binomial
 # zero-inflated negative binomial
 
-hourly_mod0 <- glm(total ~ day + hour + year, data = hourly_day)
-hourly_mod1 <- glm(total ~ day + hour + year, data = hourly_day,
+hourly_mod0 <- glm(Total ~ day + hour + year, data = hourly_day)
+hourly_mod1 <- glm(Total ~ day + hour + year, data = hourly_day,
                    family = 'poisson')
 
 AIC(hourly_mod0, hourly_mod1) # Poisson distinctly worse in AIC, but correct for this distribution
-hist(hourly_day$total) # are we overdispersed?
-mean(hourly_day$total); var(hourly_day$total) # very much so
+hist(hourly_day$Total) # are we overdispersed?
+mean(hourly_day$Total); var(hourly_day$Total) # very much so
 
-hourly_mod2 <- glm.nb(total ~ day + hour + year, data = hourly_day)
+hourly_mod2 <- glm.nb(Total ~ day + hour + year, data = hourly_day)
 
 AIC(hourly_mod0, 
     hourly_mod1,
@@ -127,10 +131,10 @@ AIC(hourly_mod0,
 pchisq(2 * (logLik(hourly_mod2) - logLik(hourly_mod1)), df = 1, lower.tail = FALSE)
 
 # NB with factor hour and year
-hourly_mod3 <- glm.nb(total ~ day + fhour + fyear, data = hourly_day)
+hourly_mod3 <- glm.nb(Total ~ day + fhour + fyear, data = hourly_day)
 
 # NB with factor hour and year, and adding month as well
-hourly_mod4 <- glm.nb(total ~ day + fhour + fyear + fmonth, data = hourly_day)
+hourly_mod4 <- glm.nb(Total ~ day + fhour + fyear + fmonth, data = hourly_day)
 
 AIC(hourly_mod2, 
     hourly_mod3, # Better
@@ -140,10 +144,10 @@ pchisq(2 * (logLik(hourly_mod4) - logLik(hourly_mod3)), df = 1, lower.tail = FAL
 
 # Zero-inflated Poisson and NB ----
 # These are fit numerically by optim under the hood, so are more time consuming than OLS regressions above
-hourly_mod5 <- zeroinfl(total ~ day + fhour + fyear + fmonth, data = hourly_day,
+hourly_mod5 <- zeroinfl(Total ~ day + fhour + fyear + fmonth, data = hourly_day,
                         dist = 'pois')
 
-hourly_mod6 <- zeroinfl(total ~ day + fhour + fyear + fmonth, 
+hourly_mod6 <- zeroinfl(Total ~ day + fhour + fyear + fmonth, 
                         data = hourly_day,
                         dist = 'negbin')
 
@@ -156,9 +160,9 @@ AIC(hourly_mod1, # Poisson
 exp(coef(hourly_mod6))
 
 # Guess tomorrow using best model
-tomorrow_dat$total <- predict(hourly_mod6, tomorrow_dat, type = "response")
+tomorrow_dat$Total <- predict(hourly_mod6, tomorrow_dat, type = "response")
 
-regression_guess <- sum(tomorrow_dat$total)  
+regression_guess <- sum(tomorrow_dat$Total)  
 
 # How does this guess compare to the mean for tomorrow's day of week and month of year? Just want to see ballpark. Looks good. For April Sundays, can see clear effect of temperature (was super cold in April 2018), which is not yet included.
 hourly_day %>%
@@ -166,13 +170,13 @@ hourly_day %>%
          day == as.character(tomorrow_dat$day[1])) %>%
   group_by(year) %>%
   summarize(n_days = n()/24,
-            ave_total = sum(total)/n_days)
+            ave_total = sum(Total)/n_days)
 
 # Time series approaches ----
 
 # Time series with seasonality
 # Transform to a time-series object; does not use any covariates
-dayts <- daily$total
+dayts <- daily$Total
 start_day = min(daily$date)
 end_day = max(daily$date)
 dayts <- ts(dayts, 
@@ -247,7 +251,7 @@ tbats_forecast1 <- forecast(dayts_tbats1, h = 120)
 plot(tbats_forecast1, include = 30) # pretty bad, just gets general weekly pattern
 
 # Try defining as multi-seasonal time series
-daymsts <- daily$total
+daymsts <- daily$Total
 start_day = min(daily$date)
 end_day = max(daily$date)
 daymsts <- msts(daymsts,
@@ -348,11 +352,11 @@ ml_guess <- sum(curr_dat$Total_RF )
 
 # Slight detour: Do we have outliers?
 # look at the hours with the highest counts. Here select 500 highest values
-max_total = hourly_day[order(hourly_day$total, decreasing =T),][1:500,]
+max_total = hourly_day[order(hourly_day$Total, decreasing =T),][1:500,]
 table(max_total$hour) # Seems possible: max times are all at peak commuting hours
 
-max_entries = hourly_day[order(hourly_day$entries, decreasing =T),][1:500,]
+max_entries = hourly_day[order(hourly_day$Westbound, decreasing =T),][1:500,]
 table(max_entries$hour) # Entries are W-bound coming from Bosotn, max values all at 5 or 6pm
 
-max_exits = hourly_day[order(hourly_day$exits, decreasing =T),][1:500,]
+max_exits = hourly_day[order(hourly_day$Eastbound, decreasing =T),][1:500,]
 table(max_exits$hour) # Exits are E-bound going to Boston, max values predominantly 8am.

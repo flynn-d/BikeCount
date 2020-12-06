@@ -32,8 +32,9 @@ if(!file.exists(hist_count_name)){
 rows_hist <- nrow(hist_count)
 last_day <- max(hist_count$date)
 
-# Try to get fresher data. Defaults to hist_count if nothing fresher found.
-if(Sys.Date() > as.Date(last_day)){
+# Try to get fresher data, if more than 1 day old.
+# Defaults to hist_count if nothing fresher found.
+if(Sys.Date() > as.Date(last_day - 1)){
   # Combine order and offset. Default is to order new to old, while our RSocrata query returns results old to new.
   response <- httr::GET(paste0(api_get, "?$order=date&$offset=", rows_hist + dup_rows))
   
@@ -103,9 +104,9 @@ daily = count %>%
                    Westbound = sum(Westbound),
                    Eastbound = sum(Eastbound))
 
-max_day = daily %>% dplyr::filter(Total == max(Total))
+max_day = daily %>% ungroup() %>% dplyr::filter(Total == max(Total))
 
-latest_day = daily %>% ungroup(daily) %>% dplyr::filter(date == max(date))
+latest_day = daily %>% ungroup() %>% dplyr::filter(date == max(date))
 
 # Order day of week factor better
 # levels(daily$day_of_week)
