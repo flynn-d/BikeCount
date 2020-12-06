@@ -94,8 +94,8 @@ get_curr_forecast_wx <- function(){
   # Get key.
   if(!exists('key')) key = scan('../keys/DarkSky_Key.txt', what = 'character')
   # Get lat and long from station_meta
-  ll = station_meta %>% filter(url == api_get) %>% select(lat, lon)
-  tz = station_meta %>% filter(url == api_get) %>% select(tz)
+  ll = station_meta %>% filter(url == api_get) %>% dplyr::select(lat, lon)
+  tz = station_meta %>% filter(url == api_get) %>% dplyr::select(tz)
   
   # Find date range to obtain: Start from last day in hist_wx (or today, whichever is minimum, and go to tomorrow
   last_day_in_hist = max(as.Date(hist_wx$date))

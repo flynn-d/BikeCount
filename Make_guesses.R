@@ -11,7 +11,7 @@ library(forecast)
 REFIT = F # Set to T to re-fit the regression and ML models
 
 # Load historical weather, then forecast weather
-hist_wx_file_name = paste0('Hist_WX_', socrata_ID, '.RData')
+hist_wx_file_name = file.path('Data', paste0('Hist_WX_', socrata_ID, '.RData'))
 
 if(file.exists(hist_wx_file_name)){
   load(hist_wx_file_name) 
@@ -23,7 +23,7 @@ if(file.exists(hist_wx_file_name)){
   }
 
 # Get forecasted weather, append and save
-curr_wx <- get_curr_forecast_wx()
+curr_wx <- get_curr_forecast_wx() 
 
 # Possible that some rows of curr_wx are present in hist_wx if get_curr_forecast_wx was run already for this day; only append new rows to hist_wx
 curr_wx_add <- curr_wx[!curr_wx$time %in% hist_wx$time,] 
@@ -95,8 +95,8 @@ curr_dat_wx <- curr_dat_wx %>%
 hourly_day_wx$rainy <- hourly_day_wx$precipProbability >= 0.15
 curr_dat_wx$rainy <- curr_dat_wx$precipProbability >= 0.15
 
-load(paste0('Regression_models_', socrata_ID,'.RData'))
-load(paste0('Random_forest_models_', socrata_ID,'.RData'))
+load(file.path('Models', paste0('Regression_models_', socrata_ID,'.RData')))
+load(file.path('Models', paste0('Random_forest_models_', socrata_ID,'.RData')))
 
 # Standard regression approaches ----
 # zero-inflated negative binomial
@@ -138,7 +138,7 @@ if(REFIT){
   
   save(list = c('hourly_mod_Total', 'hourly_mod_Westbound', 'hourly_mod_Eastbound',
                 'hourly_mod_wx_Total', 'hourly_mod_wx_Westbound', 'hourly_mod_wx_Eastbound'),
-       file = paste0('Regression_models_', socrata_ID,'.RData'))
+       file = file.path('Models', paste0('Regression_models_', socrata_ID,'.RData')))
 }
 
 # Guess today and tomorrow, with and without wx. 
@@ -227,9 +227,7 @@ if(REFIT){
   if(avail.cores > 8) avail.cores = 10 # Limit usage below max if on r4.4xlarge AWS instance (probably won't ever go that big)
   rf.inputs = list(ntree.use = avail.cores * 50, 
                    avail.cores = avail.cores, 
-                   mtry = 10,
-                   maxnodes = 1000,
-                   nodesize = 100)
+                   mtry = 3)
   test.split = .30
   
   train.dat = hourly_day
@@ -264,7 +262,7 @@ if(REFIT){
                  keep.forest = T)
   
   # Some diagnostics
-  rf.pred <- predict(rf.out, test.dat.use[fitvars], type = 'response')
+  rf.pred <- predict(rf.out, test.dat.use[,fitvars], type = 'response')
   
   ( rmse = sqrt( 
               mean(
@@ -303,7 +301,7 @@ if(REFIT){
   starttime = Sys.time()
   
   # make a cluster of all available cores
-  cl <- makeCluster(rf.inputs$avail.cores, useXDR = F) 
+  cl <- makeCluster(rf.inputs$avail.cores) 
   registerDoParallel(cl)
   
   # Loop over each response variable
@@ -336,7 +334,7 @@ if(REFIT){
   rfrmses = ls()[grep('rf_rmse_wx_', ls())]
   
   save(list = c('fitvars', 'fitvars_wx', 'rundat', rfmods, rfpreds, rfrmses),
-       file = paste0('Random_forest_models_', socrata_ID,'.RData'))
+       file = file.path('Models', paste0('Random_forest_models_', socrata_ID,'.RData')))
 } 
 # Make a guess with the RF model. Tomorrow_dat factors have to have the same levels as in the rundat, so need to add the empty levels
 

@@ -17,10 +17,10 @@ parse_socrata_ID <- regexpr(pattern, api_get, perl = T)
 socrata_ID <- substring(api_get, first = parse_socrata_ID, last = parse_socrata_ID + attr(parse_socrata_ID, 'match.length') - 1)
 
 # Load historical count once. Takes 7s initially to download, vs. 0.1s to load from working directory
-hist_count_name = paste0("BikeCountHist_", socrata_ID, ".RData")
+hist_count_name = file.path('Data', paste0("BikeCountHist_", socrata_ID, ".RData"))
 
 # We will increment the historical data daily
-if(length(grep(hist_count_name, dir()))==0){
+if(!file.exists(hist_count_name)){
   hist_count <- read.socrata(api_get)
   hist_count <- hist_count[order(hist_count$datetime),]
   original_rownum <- nrow(hist_count)
@@ -32,8 +32,9 @@ if(length(grep(hist_count_name, dir()))==0){
 rows_hist <- nrow(hist_count)
 last_day <- max(hist_count$date)
 
-# Try to get fresher data. Defaults to hist_count if nothing fresher found.
-if(Sys.Date() > as.Date(last_day)){
+# Try to get fresher data, if more than 1 day old.
+# Defaults to hist_count if nothing fresher found.
+if(Sys.Date() > as.Date(last_day - 1)){
   # Combine order and offset. Default is to order new to old, while our RSocrata query returns results old to new.
   response <- httr::GET(paste0(api_get, "?$order=date&$offset=", rows_hist + dup_rows))
   
@@ -103,9 +104,9 @@ daily = count %>%
                    Westbound = sum(Westbound),
                    Eastbound = sum(Eastbound))
 
-max_day = daily %>% dplyr::filter(Total == max(Total))
+max_day = daily %>% ungroup() %>% dplyr::filter(Total == max(Total))
 
-latest_day = daily %>% ungroup(daily) %>% dplyr::filter(date == max(date))
+latest_day = daily %>% ungroup() %>% dplyr::filter(date == max(date))
 
 # Order day of week factor better
 # levels(daily$day_of_week)

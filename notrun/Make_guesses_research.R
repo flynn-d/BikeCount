@@ -5,8 +5,9 @@
 
 # Setup ----
 source('Bike_counter_get.R')
+source('Helper_fx.R')
 library(tidyverse)
-library(MASS) # for negative binomial regression
+library(MASS) # for negative binomial regression. Masks select from dplyr
 library(pscl) # for zero-inflated models
 library(randomForest)
 library(doParallel)
@@ -16,20 +17,93 @@ library(forecast)
 today <- Sys.Date()
 tomorrow <- today + 1
 
-# Create factors for hour, year, and month, instead of numeric
-hourly_day$day = as.factor(hourly_day$day)
-hourly_day$fhour = as.factor(hourly_day$hour)
-hourly_day$fyear = as.factor(hourly_day$year)
-hourly_day$fmonth = as.factor(hourly_day$month)
+# Load historical weather, then forecast weather
+hist_wx_file_name = file.path('Data', paste0('Hist_WX_', socrata_ID, '.RData'))
+
+if(file.exists(hist_wx_file_name)){
+  load(hist_wx_file_name) 
+} else {
+  hist_wx <- get_historical_wx()
+  # Only keep unique values (should only have unique rows)
+  hist_wx <- hist_wx[!duplicated(hist_wx %>% select(time, datetime)),]
+  save("hist_wx", file = hist_wx_file_name)
+}
+
+# Get forecasted weather, append and save
+curr_wx <- get_curr_forecast_wx()
+
+# Possible that some rows of curr_wx are present in hist_wx if get_curr_forecast_wx was run already for this day; only append new rows to hist_wx
+curr_wx_add <- curr_wx[!curr_wx$time %in% hist_wx$time,] 
+hist_wx <- suppressMessages(full_join(hist_wx, curr_wx_add))
+save("hist_wx", file = hist_wx_file_name) 
+
+# create 'today' and 'tomorrow' data to guess on
+today <- Sys.Date()
+tomorrow <- today + 1
+
+today_dat <- data.frame(year = format(today, '%Y'),
+                        month = format(today, '%m'),
+                        day = format(today, '%A'),  # Full weekday name
+                        hour = seq(0, 23, by = 1),
+                        date = today,
+                        stringsAsFactors = F)
 
 tomorrow_dat <- data.frame(year = format(tomorrow, '%Y'),
                            month = format(tomorrow, '%m'),
                            day = format(tomorrow, '%A'),  # Full weekday name
                            hour = seq(0, 23, by = 1),
-                           date = tomorrow)
-tomorrow_dat$fhour = as.factor(tomorrow_dat$hour)
-tomorrow_dat$fyear = as.factor(tomorrow_dat$year)
-tomorrow_dat$fmonth = as.factor(tomorrow_dat$month)
+                           date = tomorrow,
+                           stringsAsFactors = F) %>%
+  mutate(fhour = as.factor(hour),
+         fmonth = as.factor(month),
+         fyear = as.factor(year))
+
+curr_dat <- full_join(today_dat, tomorrow_dat,
+                      by = c('year', 'date', 'month', 'day', 'hour'))
+
+# Join with weather. 
+hourly_day_wx <- left_join(hourly_day,
+                           hist_wx,
+                           by = c('year', 'date', 'month', 'day', 'hour'))
+
+curr_dat_wx <- left_join(curr_dat,
+                         curr_wx,
+                         by = c('year', 'date', 'month', 'day', 'hour'))
+
+# RF requires factors, not character vectors
+hourly_day <- hourly_day %>%
+  ungroup() %>%
+  mutate(day = as.factor(day),
+         fhour = as.factor(hour),
+         fyear = as.factor(year),
+         fmonth = as.factor(month))
+
+curr_dat <- curr_dat %>%
+  ungroup() %>%
+  mutate(day = as.factor(day),
+         fhour = as.factor(hour),
+         fyear = as.factor(year),
+         fmonth = as.factor(month))
+
+hourly_day_wx <- hourly_day_wx %>%
+  ungroup() %>%
+  mutate(day = as.factor(day),
+         fhour = as.factor(hour),
+         fyear = as.factor(year),
+         fmonth = as.factor(month),
+         precipType = as.factor(precipType))
+
+curr_dat_wx <- curr_dat_wx %>%
+  ungroup %>%
+  mutate(day = as.factor(day),
+         fhour = as.factor(hour),
+         fyear = as.factor(year),
+         fmonth = as.factor(month),
+         precipType = as.factor(precipType))
+
+# Now creating a 'rainy' variable for precipProbability over 0.15. Otherwise, regression models having some matrix invertability problems -- not enough variation at some factor levels. Should write a tryCatch to first try probability, if errors then move to rainy factor.
+hourly_day_wx$rainy <- hourly_day_wx$precipProbability >= 0.15
+curr_dat_wx$rainy <- curr_dat_wx$precipProbability >= 0.15
 
 # Standard regression approaches ----
 
@@ -39,15 +113,15 @@ tomorrow_dat$fmonth = as.factor(tomorrow_dat$month)
 # negative binomial
 # zero-inflated negative binomial
 
-hourly_mod0 <- glm(total ~ day + hour + year, data = hourly_day)
-hourly_mod1 <- glm(total ~ day + hour + year, data = hourly_day,
+hourly_mod0 <- glm(Total ~ day + hour + year, data = hourly_day)
+hourly_mod1 <- glm(Total ~ day + hour + year, data = hourly_day,
                    family = 'poisson')
 
 AIC(hourly_mod0, hourly_mod1) # Poisson distinctly worse in AIC, but correct for this distribution
-hist(hourly_day$total) # are we overdispersed?
-mean(hourly_day$total); var(hourly_day$total) # very much so
+hist(hourly_day$Total) # are we overdispersed?
+mean(hourly_day$Total); var(hourly_day$Total) # very much so
 
-hourly_mod2 <- glm.nb(total ~ day + hour + year, data = hourly_day)
+hourly_mod2 <- glm.nb(Total ~ day + hour + year, data = hourly_day)
 
 AIC(hourly_mod0, 
     hourly_mod1,
@@ -57,10 +131,10 @@ AIC(hourly_mod0,
 pchisq(2 * (logLik(hourly_mod2) - logLik(hourly_mod1)), df = 1, lower.tail = FALSE)
 
 # NB with factor hour and year
-hourly_mod3 <- glm.nb(total ~ day + fhour + fyear, data = hourly_day)
+hourly_mod3 <- glm.nb(Total ~ day + fhour + fyear, data = hourly_day)
 
 # NB with factor hour and year, and adding month as well
-hourly_mod4 <- glm.nb(total ~ day + fhour + fyear + fmonth, data = hourly_day)
+hourly_mod4 <- glm.nb(Total ~ day + fhour + fyear + fmonth, data = hourly_day)
 
 AIC(hourly_mod2, 
     hourly_mod3, # Better
@@ -70,10 +144,10 @@ pchisq(2 * (logLik(hourly_mod4) - logLik(hourly_mod3)), df = 1, lower.tail = FAL
 
 # Zero-inflated Poisson and NB ----
 # These are fit numerically by optim under the hood, so are more time consuming than OLS regressions above
-hourly_mod5 <- zeroinfl(total ~ day + fhour + fyear + fmonth, data = hourly_day,
+hourly_mod5 <- zeroinfl(Total ~ day + fhour + fyear + fmonth, data = hourly_day,
                         dist = 'pois')
 
-hourly_mod6 <- zeroinfl(total ~ day + fhour + fyear + fmonth, 
+hourly_mod6 <- zeroinfl(Total ~ day + fhour + fyear + fmonth, 
                         data = hourly_day,
                         dist = 'negbin')
 
@@ -86,9 +160,9 @@ AIC(hourly_mod1, # Poisson
 exp(coef(hourly_mod6))
 
 # Guess tomorrow using best model
-tomorrow_dat$total <- predict(hourly_mod6, tomorrow_dat, type = "response")
+tomorrow_dat$Total <- predict(hourly_mod6, tomorrow_dat, type = "response")
 
-regression_guess <- sum(tomorrow_dat$total)  
+regression_guess <- sum(tomorrow_dat$Total)  
 
 # How does this guess compare to the mean for tomorrow's day of week and month of year? Just want to see ballpark. Looks good. For April Sundays, can see clear effect of temperature (was super cold in April 2018), which is not yet included.
 hourly_day %>%
@@ -96,13 +170,13 @@ hourly_day %>%
          day == as.character(tomorrow_dat$day[1])) %>%
   group_by(year) %>%
   summarize(n_days = n()/24,
-            ave_total = sum(total)/n_days)
+            ave_total = sum(Total)/n_days)
 
 # Time series approaches ----
 
 # Time series with seasonality
 # Transform to a time-series object; does not use any covariates
-dayts <- daily$total
+dayts <- daily$Total
 start_day = min(daily$date)
 end_day = max(daily$date)
 dayts <- ts(dayts, 
@@ -177,7 +251,7 @@ tbats_forecast1 <- forecast(dayts_tbats1, h = 120)
 plot(tbats_forecast1, include = 30) # pretty bad, just gets general weekly pattern
 
 # Try defining as multi-seasonal time series
-daymsts <- daily$total
+daymsts <- daily$Total
 start_day = min(daily$date)
 end_day = max(daily$date)
 daymsts <- msts(daymsts,
@@ -196,7 +270,7 @@ plot(tbats_forecast2, include = 120) # still pretty bad except for near term for
 # Random forest
 # Code adapted from another project, can clean up later
 train.dat = hourly_day
-response.var = 'total'
+response.var = 'Total'
 class(train.dat) = 'data.frame' # drop grouped_df, tbl
 
 avail.cores = parallel::detectCores()
@@ -244,27 +318,30 @@ timediff = Sys.time() - starttime
 cat(round(timediff,2), attr(timediff, "unit"), "to fit RF model \n")
 
 # Some diagnostics
-rf.prob <- predict(rf.out, test.dat.use[fitvars])
+rf.pred <- predict(rf.out, test.dat.use[fitvars])
 
 ( mse = mean(as.numeric(as.character(test.dat.use[,response.var])) - 
-             as.numeric(rf.prob))^2 )
+             as.numeric(rf.pred))^2 )
+( rmse = sqrt( 
+  mean(
+    c( as.numeric(as.character(test.dat.use[,response.var])) - as.numeric(rf.pred) ) ^2 ) ) )
 
 # Make a guess with the RF model. Tomorrow_dat factors have to have the same levels as in the rundat, so need to add the empty levels
 
 levadd <- function(factor_var){
-  tlev <- levels(tomorrow_dat[,factor_var])
+  tlev <- levels(curr_dat[,factor_var])
   addlev <- levels(rundat[,factor_var])[!levels(rundat[,factor_var]) %in% tlev]
-  levels(tomorrow_dat[,factor_var]) = c(levels(tomorrow_dat[,factor_var]), addlev)
-  tomorrow_dat[,factor_var]
+  levels(curr_dat[,factor_var]) = c(levels(curr_dat[,factor_var]), addlev)
+  curr_dat[,factor_var]
 }
 
 for(i in fitvars) { 
-  tomorrow_dat[,i] = levadd(factor_var = i) 
+  curr_dat[,i] = levadd(factor_var = i) 
   }
 
-tomorrow_dat$total_RF <- predict(rf.out, tomorrow_dat[,fitvars])
+curr_dat$Total_RF <- predict(rf.out, curr_dat[,fitvars])
 
-ml_guess <- sum(tomorrow_dat$total_RF)
+ml_guess <- sum(curr_dat$Total_RF )
 
 # next: store these guesses, display on dashboard
 
@@ -275,11 +352,11 @@ ml_guess <- sum(tomorrow_dat$total_RF)
 
 # Slight detour: Do we have outliers?
 # look at the hours with the highest counts. Here select 500 highest values
-max_total = hourly_day[order(hourly_day$total, decreasing =T),][1:500,]
+max_total = hourly_day[order(hourly_day$Total, decreasing =T),][1:500,]
 table(max_total$hour) # Seems possible: max times are all at peak commuting hours
 
-max_entries = hourly_day[order(hourly_day$entries, decreasing =T),][1:500,]
+max_entries = hourly_day[order(hourly_day$Westbound, decreasing =T),][1:500,]
 table(max_entries$hour) # Entries are W-bound coming from Bosotn, max values all at 5 or 6pm
 
-max_exits = hourly_day[order(hourly_day$exits, decreasing =T),][1:500,]
+max_exits = hourly_day[order(hourly_day$Eastbound, decreasing =T),][1:500,]
 table(max_exits$hour) # Exits are E-bound going to Boston, max values predominantly 8am.
