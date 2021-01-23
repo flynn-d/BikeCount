@@ -92,7 +92,9 @@ get_historical_wx <- function(limit_1000 = F, chunk = c(NA, 'iter_date_range2'))
 # Get current and forecast weather 
 get_curr_forecast_wx <- function(){
   # Get key.
-  if(!exists('key')) key = scan('../keys/DarkSky_Key.txt', what = 'character')
+#  if(!exists('key')) key = scan('../keys/DarkSky_Key.txt', what = 'character')
+  if(!exists('key')) key = scan('DarkSky_Key.txt', what = 'character')
+  
   # Get lat and long from station_meta
   ll = station_meta %>% filter(url == api_get) %>% dplyr::select(lat, lon)
   tz = station_meta %>% filter(url == api_get) %>% dplyr::select(tz)

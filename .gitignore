@@ -5,3 +5,6 @@
 BikeCountHist.RData
 Scratch notes
 *.RData
+Deploy_to_Shinyapps.R
+DarkSky_Key.txt
+rsconnect/shinyapps.io/flynnd/bikecount.dcf
